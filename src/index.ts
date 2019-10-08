@@ -1,12 +1,16 @@
-const request = require("request");
 
 
+import DataFetcher from './Fetcher/DataFetcher'
+import Observation from './DataTypes/Observation'
 
-export function getDataFragment () : void {
-    request('http://localhost:3000/data/14/8392/5467?page=2019-08-06T00:00:00.000Z',
-        (err: string, res: string, body: string) => {
-        if (err) { return console.log(err); }
-        console.log(res);
-    });
+export { default as DataFetcher} from './Fetcher/DataFetcher'
+export { default as Observation} from './DataTypes/Observation'
+
+export default {
+    DataFetcher,
+    Observation
 }
 
+export function f() {
+    console.log("hallo")
+}

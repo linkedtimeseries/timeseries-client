@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/sigvevermandere/airQualityClientside#readme",
   "devDependencies": {
+    "@types/d3": "^5.7.2",
     "@types/pluralize": "0.0.29",
     "chai": "^4.2.0",
     "mocha": "^6.2.1",
@@ -30,6 +31,7 @@
   },
   "dependencies": {
     "@types/node": "^12.7.11",
+    "d3": "^5.12.0",
     "pluralize": "^8.0.0",
     "request": "^2.88.0",
     "require": "^2.4.20"
