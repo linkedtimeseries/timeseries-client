@@ -1,10 +1,12 @@
 
 let datafetcher = new AQClientSide.DataFetcher();
 
-datafetcher.getObservationsDataFragment().then(response => {
-    datafetcher.filterObservations(response);
-    buildChart(datafetcher.no2Observations);
-});
+// datafetcher.getObservationsDataFragment('2019-08-06T00:00:00.000Z').then(response => {
+//     datafetcher.filterObservations(response);
+//     buildChart(datafetcher.no2Observations);
+// });
+
+datafetcher.getObservations('2019-08-05T00:00:00.000Z', '2019-08-06T00:00:00.000Z');
 
 function buildChart(data) {
 // set the dimensions and margins of the graph
@@ -42,7 +44,6 @@ function buildChart(data) {
     // format the data
     data.forEach(function (d) {
         d.resultTime = parseTime(d.resultTime);
-        console.log(d.resultTime);
     });
 
     // Scale the range of the data
