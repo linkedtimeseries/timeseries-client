@@ -4,12 +4,11 @@ const request = require("request");
 
 export default class DataFetcher {
 
-    observations: Observation[] = [];
-    parseDate = d3.timeParse('%Y-%m-%dT%H:%M:%S.%LZ');
     private baseUrl =  'http://localhost:3000/data/14';
     private basepropertyUrl = 'http://example.org/data/airquality';
     public no2Observations: Observation[] = [];
-    private chartProps: any;
+    public o3Observations: Observation[] = [];
+    public pm10Observations: Observation[] = [];
 
     constructor() {}
 
@@ -20,7 +19,8 @@ export default class DataFetcher {
 
     public async getObservationsRecursive(fromDate: (Date | string), url: string, obs: Observation[]): Promise<Observation[]> {
         return this.getDataFragment(url).then(response => {
-            obs.concat(response['@graph'].slice(1));
+            // this way, the observations stay ordered while we go back in time
+            obs = response['@graph'].slice(1).concat(obs);
             console.log('current response: ' + JSON.stringify(response));
             console.log('startDate: ' + JSON.stringify(response.startDate));
             console.log('previous: ' + JSON.stringify(response.previous));
@@ -57,13 +57,33 @@ export default class DataFetcher {
         });
     }
 
-    public filterObservations(obs: Observation[]): void {
+    public filterObservations(obs: Observation[], fromDate: (string | Date), toDate: (string | Date)): void {
+        if (typeof fromDate === 'string') {
+            fromDate = new Date(fromDate);
+        }
+
+        if (typeof toDate === 'string') {
+            toDate = new Date(toDate);
+        }
+        this.no2Observations = [];
+        this.o3Observations = [];
+
+
         // will be expanded later on
         obs.forEach( ob => {
-            switch (ob.observedProperty) {
-                case this.basepropertyUrl + '.no2::number':
-                    this.no2Observations.push(ob);
-                    break;
+            let resultDate = new Date(ob.resultTime);
+            if (resultDate <= toDate && resultDate >= fromDate) {
+                switch (ob.observedProperty) {
+                    case this.basepropertyUrl + '.no2::number':
+                        this.no2Observations.push(ob);
+                        break;
+                    case this.basepropertyUrl + '.o3::number':
+                        this.o3Observations.push(ob);
+                        break;
+                    case this.basepropertyUrl + '.pm10::number':
+                        this.pm10Observations.push(ob);
+                        break;
+                }
             }
         });
     }

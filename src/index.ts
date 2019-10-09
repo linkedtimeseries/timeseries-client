@@ -10,7 +10,3 @@ export default {
     DataFetcher,
     Observation
 }
-
-export function f() {
-    console.log("hallo")
-}

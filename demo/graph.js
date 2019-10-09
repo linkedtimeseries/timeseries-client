@@ -1,12 +1,21 @@
 
 let datafetcher = new AQClientSide.DataFetcher();
 
-// datafetcher.getObservationsDataFragment('2019-08-06T00:00:00.000Z').then(response => {
-//     datafetcher.filterObservations(response);
-//     buildChart(datafetcher.no2Observations);
-// });
+function getAirQualityData() {
+    const fromDate = toISO(document.getElementById('start').value);
+    const toDate = toISO(document.getElementById('end').value);
+    console.log(fromDate);
+    datafetcher.getObservations(fromDate, toDate)
+        .then( response => {
+            datafetcher.filterObservations(response, fromDate, toDate);
+            console.log(datafetcher.no2Observations);
+            buildChart(datafetcher.no2Observations);
+        });
+}
 
-datafetcher.getObservations('2019-08-05T00:00:00.000Z', '2019-08-06T00:00:00.000Z');
+function toISO(date) {
+    return date + 'Z';
+}
 
 function buildChart(data) {
 // set the dimensions and margins of the graph
