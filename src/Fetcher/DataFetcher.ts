@@ -24,10 +24,10 @@ export default class DataFetcher {
             console.log('current response: ' + JSON.stringify(response));
             console.log('startDate: ' + JSON.stringify(response.startDate));
             console.log('previous: ' + JSON.stringify(response.previous));
-            // TODO: lelijkheid fiksen
-            console.log('edited: ' + JSON.stringify(response.previous.substring(response.previous.indexOf('page='))));
+            console.log('edited: ' + JSON.stringify(DataFetcher.parseURL(response.previous).searchObject['page']));
             if (new Date(response.startDate) > new Date(fromDate)) {
-                return this.getObservationsRecursive(fromDate, `${this.baseUrl}/8392/5467?` + response.previous.substring(response.previous.indexOf('page=')), obs);
+                let prevDate = DataFetcher.parseURL(response.previous).searchObject['page'];
+                return this.getObservationsRecursive(fromDate, `${this.baseUrl}/8392/5467?page=${prevDate}`, obs);
             }
             else {
                 return obs;
@@ -86,5 +86,31 @@ export default class DataFetcher {
                 }
             }
         });
+    }
+
+    public static parseURL(url: string) {
+        let parser = document.createElement('a');
+        let searchObject: any = {};
+        let queries;
+        let split;
+
+        // Let the browser do the work
+        parser.href = url;
+        // Convert query string to object
+        queries = parser.search.replace(/^\?/, '').split('&');
+        for(let i = 0; i < queries.length; i++ ) {
+            split = queries[i].split('=');
+            searchObject[split[0]] = split[1];
+        }
+        return {
+            protocol: parser.protocol,
+            host: parser.host,
+            hostname: parser.hostname,
+            port: parser.port,
+            pathname: parser.pathname,
+            search: parser.search,
+            searchObject: searchObject,
+            hash: parser.hash
+        };
     }
 }
