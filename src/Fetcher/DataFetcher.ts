@@ -1,6 +1,4 @@
-import * as d3 from 'd3'
 import Observation from '../DataTypes/Observation';
-const request = require("request");
 
 export default class DataFetcher {
 
