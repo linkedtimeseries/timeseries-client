@@ -1,13 +1,15 @@
 {
-  "name": "clientside",
-  "version": "1.0.0",
+  "name": "timeseries-client",
+  "version": "1.0.4",
   "description": "",
-  "private": true,
+  "private": false,
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
+  "browser": "dist/bundle.js",
   "scripts": {
     "build": "tsc",
-    "test": "mocha --reporter spec"
+    "browser": "npm run webpack",
+    "webpack": "webpack --config webpack.config.js"
   },
   "repository": {
     "type": "git",
@@ -20,10 +22,6 @@
   },
   "homepage": "https://github.com/sigvevermandere/airQualityClientside#readme",
   "devDependencies": {
-    "@types/d3": "^5.7.2",
-    "@types/pluralize": "0.0.29",
-    "chai": "^4.2.0",
-    "mocha": "^6.2.1",
     "ts-loader": "^6.2.0",
     "typescript": "^3.6.3",
     "webpack": "^4.41.0",
@@ -31,9 +29,6 @@
   },
   "dependencies": {
     "@types/node": "^12.7.11",
-    "d3": "^5.12.0",
-    "pluralize": "^8.0.0",
-    "request": "^2.88.0",
     "require": "^2.4.20"
   }
 }

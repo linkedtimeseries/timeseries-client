@@ -2,7 +2,7 @@ import Observation from '../DataTypes/Observation';
 
 export default class DataFetcher {
 
-    private baseUrl =  'http://localhost:3000/data/14';
+    private baseUrl =  'http://localhost:5000/data/14';
     private basepropertyUrl = 'http://example.org/data/airquality';
     public no2Observations: Observation[] = [];
     public o3Observations: Observation[] = [];
@@ -11,7 +11,7 @@ export default class DataFetcher {
     constructor() {}
 
     public async getObservations(fromDate: (Date | string), toDate: (Date | string)) : Promise<Observation[]> {
-        console.log('test');
+        console.log('request sent');
         return this.getObservationsRecursive(fromDate, `${this.baseUrl}/8392/5467?page=${toDate}`, []);
     }
 
@@ -19,7 +19,7 @@ export default class DataFetcher {
         return this.getDataFragment(url).then(response => {
             // this way, the observations stay ordered while we go back in time
             obs = response['@graph'].slice(1).concat(obs);
-            console.log('current response: ' + JSON.stringify(response));
+            //console.log('current response: ' + JSON.stringify(response));
             console.log('startDate: ' + JSON.stringify(response.startDate));
             console.log('previous: ' + JSON.stringify(response.previous));
             console.log('edited: ' + JSON.stringify(DataFetcher.parseURL(response.previous).searchObject['page']));
