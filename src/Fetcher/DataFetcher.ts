@@ -1,34 +1,35 @@
 import Observation from '../DataTypes/Observation';
+import {FragmentEvent} from "../EventEmitter/FragmentEvent";
+import {Disposable} from "../EventEmitter/Disposable";
 
 export default class DataFetcher {
 
     private baseUrl =  'http://localhost:5000/data/14';
     private basepropertyUrl = 'http://example.org/data/airquality';
-    public no2Observations: Observation[] = [];
-    public o3Observations: Observation[] = [];
-    public pm10Observations: Observation[] = [];
+    private observations: Record<string, Observation[]> = {};
+    private fragEvent: FragmentEvent<Record<string, Observation[]>> = new FragmentEvent();
 
     constructor() {}
 
-    public async getObservations(fromDate: (Date | string), toDate: (Date | string)) : Promise<Observation[]> {
+    public async getObservations(fromDate: (Date | string), toDate: (Date | string)) {
         console.log('request sent');
-        return this.getObservationsRecursive(fromDate, `${this.baseUrl}/8392/5467?page=${toDate}`, []);
+        this.observations = {};
+        this.getObservationsRecursive(fromDate, toDate, `${this.baseUrl}/8392/5467?page=${toDate}`, []);
     }
 
-    public async getObservationsRecursive(fromDate: (Date | string), url: string, obs: Observation[]): Promise<Observation[]> {
-        return this.getDataFragment(url).then(response => {
-            // this way, the observations stay ordered while we go back in time
-            obs = response['@graph'].slice(1).concat(obs);
+    public async getObservationsRecursive(fromDate: (Date | string), toDate: (Date | string), url: string, obs: Observation[]) {
+        this.getDataFragment(url).then(response => {
+            let fragmentObs = response['@graph'].slice(1);
+            obs = fragmentObs.concat(obs);
             //console.log('current response: ' + JSON.stringify(response));
+            this.filterObservations(fragmentObs, fromDate, toDate);
+            this.fragEvent.emit(response);
             console.log('startDate: ' + JSON.stringify(response.startDate));
             console.log('previous: ' + JSON.stringify(response.previous));
             console.log('edited: ' + JSON.stringify(DataFetcher.parseURL(response.previous).searchObject['page']));
             if (new Date(response.startDate) > new Date(fromDate)) {
                 let prevDate = DataFetcher.parseURL(response.previous).searchObject['page'];
-                return this.getObservationsRecursive(fromDate, `${this.baseUrl}/8392/5467?page=${prevDate}`, obs);
-            }
-            else {
-                return obs;
+                this.getObservationsRecursive(fromDate, toDate,`${this.baseUrl}/8392/5467?page=${prevDate}`, obs);
             }
         })
     }
@@ -55,7 +56,12 @@ export default class DataFetcher {
         });
     }
 
-    public filterObservations(obs: Observation[], fromDate: (string | Date), toDate: (string | Date)): void {
+    public addFragmentListener(method: CallableFunction) {
+        this.fragEvent.on((observations) => method(observations));
+    }
+
+
+    public filterObservations(obs: Observation[], fromDate: (string | Date), toDate: (string | Date)): Record<string, Observation[]>{
         if (typeof fromDate === 'string') {
             fromDate = new Date(fromDate);
         }
@@ -63,27 +69,33 @@ export default class DataFetcher {
         if (typeof toDate === 'string') {
             toDate = new Date(toDate);
         }
-        this.no2Observations = [];
-        this.o3Observations = [];
 
-
+        let fragmentObservations: Record<string, Observation[]> = {};
         // will be expanded later on
         obs.forEach( ob => {
             let resultDate = new Date(ob.resultTime);
             if (resultDate <= toDate && resultDate >= fromDate) {
-                switch (ob.observedProperty) {
-                    case this.basepropertyUrl + '.no2::number':
-                        this.no2Observations.push(ob);
-                        break;
-                    case this.basepropertyUrl + '.o3::number':
-                        this.o3Observations.push(ob);
-                        break;
-                    case this.basepropertyUrl + '.pm10::number':
-                        this.pm10Observations.push(ob);
-                        break;
+                if (!(ob.observedProperty in fragmentObservations)) {
+                    fragmentObservations[ob.observedProperty] = [];
                 }
+                fragmentObservations[ob.observedProperty].push(ob);
             }
         });
+        for (let key in fragmentObservations) {
+            if (!(key in this.observations)) {
+                this.observations[key] = fragmentObservations[key];
+            }
+            else {
+                this.observations[key] = fragmentObservations[key].concat(this.observations[key]);
+            }
+        }
+        return fragmentObservations;
+    }
+
+
+
+    public getCurrentObservations(metric: string) {
+        return this.observations[metric];
     }
 
     public static parseURL(url: string) {
