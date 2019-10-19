@@ -19,6 +19,7 @@ export default class DataFetcher {
 
     public async getObservationsRecursive(fromDate: (Date | string), toDate: (Date | string), url: string, obs: Observation[]) {
         this.getDataFragment(url).then(response => {
+            console.log(response);
             let fragmentObs = response['@graph'].slice(1);
             obs = fragmentObs.concat(obs);
             //console.log('current response: ' + JSON.stringify(response));
@@ -49,11 +50,8 @@ export default class DataFetcher {
     }
 
     public async getDataFragment(url: string): Promise<any> {
-        return new Promise(resolve => {
-            fetch(url)
-                .then(response => response.json())
-                .then(body => resolve(body))
-        });
+        return fetch(url)
+                .then(response => response.json());
     }
 
     public addFragmentListener(method: CallableFunction) {
@@ -96,6 +94,10 @@ export default class DataFetcher {
 
     public getCurrentObservations(metric: string) {
         return this.observations[metric];
+    }
+
+    public getAllCurrentObservations() {
+        return this.observations;
     }
 
     public static parseURL(url: string) {
