@@ -28,7 +28,11 @@
     "webpack-cli": "^3.3.9"
   },
   "dependencies": {
+    "@turf/boolean-contains": "^6.0.1",
+    "@turf/turf": "^5.1.6",
     "@types/node": "^12.7.11",
-    "require": "^2.4.20"
+    "global-mercator": "^3.1.0",
+    "require": "^2.4.20",
+    "tslint": "^5.20.0"
   }
 }
