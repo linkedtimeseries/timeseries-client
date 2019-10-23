@@ -21,49 +21,51 @@ export default class PolygonUtils {
     private readonly bbox: IBoundingBox;
     private readonly tBoundingBox: ITilesBoundingBox;
 
-    constructor(input: Position[][]) {
+    constructor(input: Array<{lat: number, lng: number}>) {
         this.polygon = this.createPolygon(input);
+        console.log(this.polygon);
         this.bbox = this.calculateBBox(input);
         this.tBoundingBox = this.calculateTilesWithinBBox();
     }
 
-    public createPolygon(coords: Position[][]): Feature<Polygon> {
-        // const turfCoords: Position[] = [];
-        // console.log(coords);
-        // coords.forEach( (coord) => {
-        //     console.log(coord);
-        //     turfCoords.push([coord.lat, coord.lng]);
-        // });
-        // console.log("turfcoords: " + turfCoords);
-        // return polygon([turfCoords]);
-        return polygon(coords);
+    public createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
+        const turfCoords: Position[] = [];
+        console.log(coords);
+        coords.forEach( (coord) => {
+            console.log(coord);
+            turfCoords.push([coord.lat, coord.lng]);
+        });
+        turfCoords.push([coords[0].lat, coords[0].lng]);
+        console.log("turfcoords: " + turfCoords);
+        return polygon([turfCoords]);
     }
 
     public getBbox() {
         return this.bbox;
     }
 
-    public calculateBBox(positions: Position[][]): IBoundingBox {
+    public calculateBBox(coords: Array<{lat: number, lng: number}>): IBoundingBox {
         let minLat = Number.MAX_SAFE_INTEGER;
         let maxLat = - Number.MAX_SAFE_INTEGER;
         let minLon = Number.MAX_SAFE_INTEGER;
         let maxLon = - Number.MAX_SAFE_INTEGER;
-        const coords = positions[0];
 
         coords.forEach( (coord) => {
-            if (coord[0] < minLat) {
-                minLat = coord[0];
+            console.log(coord);
+            if (coord.lat < minLat) {
+                minLat = coord.lat;
             }
-            if (coord[0] > maxLat) {
-                maxLat = coord[0];
+            if (coord.lat > maxLat) {
+                maxLat = coord.lat;
             }
-            if (coord[1] < minLon) {
-                minLon = coord[0];
+            if (coord.lng < minLon) {
+                minLon = coord.lng;
             }
-            if (coord[1] > maxLon) {
-                maxLon = coord[0];
+            if (coord.lng > maxLon) {
+                maxLon = coord.lng;
             }
         });
+        console.log({minLat, minLon, maxLat, maxLon});
         return {minLat, minLon, maxLat, maxLon};
     }
 
@@ -82,6 +84,7 @@ export default class PolygonUtils {
         minTile.yTile += 1;
         maxTile.xTile -= 1;
         maxTile.yTile -= 1;
+        console.log({minTile, maxTile});
         return {minTile, maxTile};
     }
 
