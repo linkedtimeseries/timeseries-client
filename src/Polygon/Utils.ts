@@ -28,7 +28,24 @@ export default class PolygonUtils {
         this.tBoundingBox = this.calculateTilesWithinBBox();
     }
 
-    public createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
+    public calculateTilePolygon(): Feature<Polygon> | undefined {
+        const tilePolys: Array<Array<Feature<Polygon> | undefined>> =
+            this.calculateTilesWithinPolygon();
+        const firstPolyWithIndex: (
+            {tile: Feature<Polygon>, row: number, col: number} | undefined
+            ) =
+            this.findFirstTileInGrid(tilePolys);
+        console.log(tilePolys);
+        if (typeof firstPolyWithIndex === "undefined") {
+            return;
+        }
+        tilePolys[firstPolyWithIndex.row][firstPolyWithIndex.col] = undefined;
+        const resultPolygon = this.calculateTilePolygonRecursive(
+            firstPolyWithIndex.tile, firstPolyWithIndex.row, firstPolyWithIndex.col, tilePolys);
+        return this.simplifyPolygon(resultPolygon);
+    }
+
+    private createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
         const turfCoords: Position[] = [];
         // console.log(coords);
         coords.forEach( (coord) => {
@@ -40,11 +57,11 @@ export default class PolygonUtils {
         return polygon([turfCoords]);
     }
 
-    public getBbox() {
+    private getBbox() {
         return this.bbox;
     }
 
-    public calculateBBox(coords: Array<{lat: number, lng: number}>): IBoundingBox {
+    private calculateBBox(coords: Array<{lat: number, lng: number}>): IBoundingBox {
         let minLat = Number.MAX_SAFE_INTEGER;
         let maxLat = - Number.MAX_SAFE_INTEGER;
         let minLon = Number.MAX_SAFE_INTEGER;
@@ -69,14 +86,14 @@ export default class PolygonUtils {
         return {minLat, minLon, maxLat, maxLon};
     }
 
-    public getTile(lat: number, lon: number, zoom: number): Tile {
+    private getTile(lat: number, lon: number, zoom: number): Tile {
         const xtile: number = Math.floor( (lon + 180) / 360 * Math.pow(2, zoom) );
         const ytile: number = Math.floor( (1 - Math.log(Math.tan(this.toRad(lat)) + 1 /
             Math.cos(this.toRad(lat))) / Math.PI) / 2 * Math.pow(2, zoom) );
         return {xTile: xtile, yTile: ytile, zoom};
     }
 
-    public calculateTilesWithinBBox(): ITilesBoundingBox {
+    private calculateTilesWithinBBox(): ITilesBoundingBox {
         const minTile = this.getTile(this.bbox.minLat, this.bbox.minLon, Config.context.zoom);
         // console.log(minTile);
         const maxTile = this.getTile(this.bbox.maxLat, this.bbox.maxLon, Config.context.zoom);
@@ -90,24 +107,7 @@ export default class PolygonUtils {
         return {minTile, maxTile};
     }
 
-    public calculateTilePolygon(): Feature<Polygon> | undefined {
-        const tilePolys: Array<Array<Feature<Polygon> | undefined>> =
-            this.calculateTilesWithinPolygon();
-        const firstPolyWithIndex: (
-            {tile: Feature<Polygon>, row: number, col: number} | undefined
-            ) =
-            this.findFirstTileInGrid(tilePolys);
-        console.log(tilePolys);
-        if (typeof firstPolyWithIndex === "undefined") {
-            return;
-        }
-        tilePolys[firstPolyWithIndex.row][firstPolyWithIndex.col] = undefined;
-        const resultPolygon = this.calculateTilePolygonRecursive(
-            firstPolyWithIndex.tile, firstPolyWithIndex.row, firstPolyWithIndex.col, tilePolys);
-        return this.simplifyPolygon(resultPolygon);
-    }
-
-    public findFirstTileInGrid(tilePolys: Array<Array<Feature<Polygon> | undefined>>):
+    private findFirstTileInGrid(tilePolys: Array<Array<Feature<Polygon> | undefined>>):
         ({tile: Feature<Polygon>, row: number, col: number} | undefined) {
         for (let i = 0; i < tilePolys.length; i++) {
             for (let j = 0; j < tilePolys[i].length; j++) {
@@ -121,7 +121,7 @@ export default class PolygonUtils {
         return;
     }
 
-    public calculateTilePolygonRecursive(
+    private calculateTilePolygonRecursive(
         currTile: Feature<Polygon>,
         row: number,
         col: number,
@@ -138,7 +138,7 @@ export default class PolygonUtils {
         return currTile;
     }
 
-    public addTileToUnion(
+    private addTileToUnion(
         currTile: Feature<Polygon>,
         row: number,
         col: number,
@@ -157,7 +157,7 @@ export default class PolygonUtils {
         return currTile;
     }
 
-    public calculateTilesWithinPolygon(): Array<Array<Feature<Polygon> | undefined>> {
+    private calculateTilesWithinPolygon(): Array<Array<Feature<Polygon> | undefined>> {
         const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
         const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
         const tilePolys: Array<Array<Feature<Polygon> | undefined>> = [];
@@ -185,7 +185,7 @@ export default class PolygonUtils {
         return tilePolys;
     }
 
-    public simplifyPolygon(poly: Feature<Polygon>): Feature<Polygon> {
+    private simplifyPolygon(poly: Feature<Polygon>): Feature<Polygon> {
         const coordinates = (poly.geometry as Polygon).coordinates[0];
         const newCoordinates: Position[] = [];
         let prevCoord = coordinates[0];

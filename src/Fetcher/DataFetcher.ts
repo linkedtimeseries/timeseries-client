@@ -1,5 +1,7 @@
+import {Feature, Polygon} from "@turf/turf";
 import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
+import PolygonUtils from "../Polygon/Utils";
 
 export default class DataFetcher {
 
@@ -29,18 +31,24 @@ export default class DataFetcher {
         };
     }
 
-    private baseUrl =  "http://localhost:5000/data/14";
+    private baseUrl =  "http://localhost:5000/data/14/geometry";
     private basepropertyUrl = "http://example.org/data/airquality";
     private observations: Record<string, Observation[]> = {};
     private fragEvent: FragmentEvent<Record<string, Observation[]>> = new FragmentEvent();
 
-    public async getObservations(fromDate: (Date | string), toDate: (Date | string)) {
+    public async getPolygonObservations(
+        geometry: Array<{lat: number, lng: number}>, fromDate: (Date | string), toDate: (Date | string)) {
+        const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
+        const polygon: Feature<Polygon> = polygonUtils.calculateTilePolygon() as Feature<Polygon>;
+        const coordinateString: string = (polygon.geometry as Polygon).coordinates[0].join(";");
         console.log("request sent");
         this.observations = {};
-        this.getObservationsRecursive(fromDate, toDate, `${this.baseUrl}/8392/5467?page=${toDate}`, []);
+        this.getObservationsRecursive(coordinateString, fromDate, toDate,
+            `${this.baseUrl}?geometry=${coordinateString}&page=${toDate}`, []);
     }
 
     public async getObservationsRecursive(
+        coordinateString: string,
         fromDate: (Date | string),
         toDate: (Date | string),
         url: string, obs: Observation[]) {
@@ -56,7 +64,8 @@ export default class DataFetcher {
             console.log("edited: " + JSON.stringify(DataFetcher.parseURL(response.previous).searchObject.page));
             if (new Date(response.startDate) > new Date(fromDate)) {
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(fromDate, toDate, `${this.baseUrl}/8392/5467?page=${prevDate}`, obs);
+                this.getObservationsRecursive(coordinateString, fromDate, toDate,
+                    `${this.baseUrl}?geometry=${coordinateString}&page=${prevDate}`, obs);
             }
         });
     }
@@ -74,6 +83,7 @@ export default class DataFetcher {
     }
 
     public async getDataFragment(url: string): Promise<any> {
+        console.log(url);
         return fetch(url)
                 .then((response) => response.json());
     }
