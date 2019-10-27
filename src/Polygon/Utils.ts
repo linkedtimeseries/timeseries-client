@@ -30,7 +30,7 @@ export default class PolygonUtils {
 
     public calculateTilePolygon(): Feature<Polygon> | undefined {
         const tilePolys: Array<Array<Feature<Polygon> | undefined>> =
-            this.calculateTilesWithinPolygon();
+            this.calculateBBoxTilesWithinPolygon();
         const firstPolyWithIndex: (
             {tile: Feature<Polygon>, row: number, col: number} | undefined
             ) =
@@ -43,6 +43,18 @@ export default class PolygonUtils {
         const resultPolygon = this.calculateTilePolygonRecursive(
             firstPolyWithIndex.tile, firstPolyWithIndex.row, firstPolyWithIndex.col, tilePolys);
         return this.simplifyPolygon(resultPolygon);
+    }
+
+    public calculateTilesWithinPolygon(): Tile[] {
+        const tiles: Tile[] = [];
+        this.calculateTileGridWithinPolygon().forEach((tileRow) => {
+            tileRow.forEach((tile) => {
+                if (tile instanceof Tile) {
+                    tiles.push(tile);
+                }
+            });
+        });
+        return tiles;
     }
 
     private createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
@@ -157,10 +169,34 @@ export default class PolygonUtils {
         return currTile;
     }
 
-    private calculateTilesWithinPolygon(): Array<Array<Feature<Polygon> | undefined>> {
+    private calculateBBoxTilesWithinPolygon(): Array<Array<Feature<Polygon> | undefined>> {
         const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
         const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
         const tilePolys: Array<Array<Feature<Polygon> | undefined>> = [];
+        for (let i = 0; i < rows; i++) {
+            tilePolys[i] = [];
+            for (let j = 0; j < cols; j++) {
+                tilePolys[i][j] = undefined;
+            }
+        }
+        const tileGrid = this.calculateTileGridWithinPolygon();
+        for (let i = 0; i < tileGrid.length; i++) {
+            for (let j = 0; j < tileGrid[0].length; j++) {
+                const tile = tileGrid[i][j];
+                if (tile instanceof Tile) {
+                    const bb = globalMercator.googleToBBox(
+                        [(tile as Tile).xTile, (tile as Tile).yTile, Config.context.zoom]);
+                    tilePolys[i][j] = bboxPolygon([bb[1], bb[0], bb[3], bb[2]]);
+                }
+            }
+        }
+        return tilePolys;
+    }
+
+    private calculateTileGridWithinPolygon(): Array<Array<Tile | undefined>> {
+        const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
+        const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
+        const tilePolys: Array<Array<Tile | undefined>> = [];
         for (let i = 0; i < rows; i++) {
             tilePolys[i] = [];
             for (let j = 0; j < cols; j++) {
@@ -177,7 +213,7 @@ export default class PolygonUtils {
                 if (booleanContains(this.polygon, bboxPoly)) {
                     // console.log("row: " + (currY - offsetYtile).toString());
                     // console.log("col: " + (currX - offsetXtile).toString());
-                    tilePolys[currY - offsetYtile][currX - offsetXtile] = bboxPoly;
+                    tilePolys[currY - offsetYtile][currX - offsetXtile] = new Tile(currX, currY, Config.context.zoom);
                 }
             }
         }
