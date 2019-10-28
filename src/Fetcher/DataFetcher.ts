@@ -39,23 +39,30 @@ export default class DataFetcher {
 
     public async getPolygonObservations(
         geometry: Array<{lat: number, lng: number}>, fromDate: (Date | string), toDate: (Date | string)) {
+        console.log("hallo");
         const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
         console.log("request sent");
         console.log(tiles);
         this.observations = {};
-        this.getObservationsRecursive(tiles, fromDate, toDate, []);
+        this.getObservationsRecursive(tiles, fromDate, toDate, toDate, []);
+    }
+
+    public testLib() {
+        console.log("test");
     }
 
     public async getObservationsRecursive(
         tiles: Tile[],
         fromDate: (Date | string),
+        currDate: (Date | string),
         toDate: (Date | string),
         obs: Observation[]) {
-        this.getTilesDataFragments(tiles, fromDate, toDate, obs).then((response) => {
+        this.getTilesDataFragments(tiles, fromDate, currDate, toDate).then((response) => {
             if (new Date(response.startDate) > new Date(fromDate)) {
+                console.log("next");
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(tiles, fromDate, prevDate, obs);
+                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, obs);
             }
         });
     }
@@ -75,38 +82,37 @@ export default class DataFetcher {
     public async getTilesDataFragments(
         tiles: Tile[],
         fromDate: (Date | string),
-        toDate: (Date | string),
-        obs: Observation[]): Promise<any> {
+        currDate: (Date | string),
+        toDate: (Date | string)): Promise<any> {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
-        let url = `${this.baseUrl}/${tiles[0].xTile}/${tiles[0].yTile}?page=${toDate}`;
         let fragmentStart: string = "";
         let fragmentPrevious: string = "";
         let fragmentEnd: string = "";
-        const unsortedObs: Observation[][] = [];
+        const unsortedObs: Record<string, Observation[][]> = {};
+        console.log("fragment");
         for (let i = 0; i < tiles.length; i++) {
-            url = `${this.baseUrl}/${tiles[i].xTile}/${tiles[i].yTile}?page=${toDate}`;
+            const url = `${this.baseUrl}/${tiles[i].xTile}/${tiles[i].yTile}?page=${currDate}`;
             const response = await this.getDataFragment(url);
             const fragmentObs = response["@graph"].slice(1);
-            unsortedObs.push(fragmentObs);
-            // console.log('current response: ' + JSON.stringify(response));
-            this.filterObservations(fragmentObs, fromDate, toDate);
+            const filteredFragmentObs = this.filterObservations(fragmentObs, fromDate, toDate);
+            for (const key of Object.keys(filteredFragmentObs)) {
+                if (! (key in unsortedObs)) {
+                    unsortedObs[key] = [];
+                }
+                unsortedObs[key].push(filteredFragmentObs[key]);
+            }
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
             fragmentPrevious = response.previous;
-            // this.fragEvent.emit(response);
-            console.log("startDate: " + JSON.stringify(response.startDate));
-            console.log("previous: " + JSON.stringify(response.previous));
-            console.log("edited: " + JSON.stringify(DataFetcher.parseURL(response.previous).searchObject.page));
         }
-        const fragObs = this.mergeObservations(unsortedObs);
+        console.log(unsortedObs);
+        const allFragObs = this.mergeObservations(unsortedObs);
+        console.log(allFragObs);
         const response: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
+        this.addObservations(allFragObs);
         this.fragEvent.emit(response);
-        obs = fragObs.concat(obs);
-        console.log(fragObs);
-        console.log(this.observations);
-        console.log("einde");
         return response;
     }
 
@@ -116,7 +122,26 @@ export default class DataFetcher {
                 .then((response) => response.json());
     }
 
-    public mergeObservations(unsortedObs: Observation[][]): Observation[] {
+    public addObservations(obs: Record<string, Observation[]>): void {
+        for (const key of Object.keys(obs)) {
+            if (!(key in this.observations)) {
+                this.observations[key] = obs[key];
+            } else {
+                this.observations[key] = obs[key].concat(this.observations[key]);
+            }
+        }
+    }
+
+    public mergeObservations(unsortedObs: Record<string, Observation[][]>): Record<string, Observation[]> {
+        const mergedObs: Record<string, Observation[]> = {};
+        for (const key of Object.keys(unsortedObs)) {
+            console.log(unsortedObs[key]);
+            mergedObs[key] = this.mergeMetric(unsortedObs[key]);
+        }
+        return mergedObs;
+    }
+
+    public mergeMetric(unsortedObs: Observation[][]): Observation[] {
         const obs: Observation[] = [];
         const indices: number[] = new Array(unsortedObs.length).fill(0);
         const currDates: Date[] = [];
@@ -126,7 +151,7 @@ export default class DataFetcher {
             hasReachedEnd.push(false);
         });
 
-        while (! this.finishedMerging(indices, unsortedObs)) {
+        while (! this.finishedMerging(hasReachedEnd)) {
             const minDate = this.minDate(currDates, hasReachedEnd);
             const minIndex = currDates.indexOf(minDate);
             obs.push(unsortedObs[minIndex][indices[minIndex]]);
@@ -144,24 +169,17 @@ export default class DataFetcher {
         this.fragEvent.on((observations) => method(observations));
     }
 
-    public finishedMerging(indices: number[], obs: Observation[][]): boolean {
-        for (let i = 0; i < obs.length; i++) {
-            if (indices[i] < obs[i].length) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public minIndex(indices: number[]): number {
-        return indices.reduce((a, b) => Math.min(a, b));
+    public finishedMerging(hasReachedEnd: boolean[]): boolean {
+        return ! hasReachedEnd.includes(false);
     }
 
     public minDate(dates: Date[], hasReachedEnd: boolean[]) {
-        let minDate: Date = dates[0];
+        let minIndex: number = 0;
+        let minDate: Date = dates[minIndex];
         for (let i = 0; i < dates.length; i++) {
-            if (dates[i] < minDate && ! hasReachedEnd[i]) {
+            if ((dates[i] < minDate || hasReachedEnd[minIndex]) && ! hasReachedEnd[i]) {
                 minDate = dates[i];
+                minIndex = i;
             }
         }
         return minDate;
@@ -189,17 +207,11 @@ export default class DataFetcher {
                 fragmentObservations[ob.observedProperty].push(ob);
             }
         });
-        for (const key in fragmentObservations) {
-            if (!(key in this.observations)) {
-                this.observations[key] = fragmentObservations[key];
-            } else {
-                this.observations[key] = fragmentObservations[key].concat(this.observations[key]);
-            }
-        }
         return fragmentObservations;
     }
 
     public getCurrentObservations(metric: string) {
+        // console.log(this.observations);
         return this.observations[metric];
     }
 
