@@ -56,10 +56,6 @@ export default class DataFetcher {
         this.getObservationsRecursive(tiles, fromDate, toDate, toDate);
     }
 
-    public testLib() {
-        console.log("test");
-    }
-
     /**
      * Fetch fragments. After each request, the previous date of the fragment is checked
      * and also fetched if necessary.
@@ -114,10 +110,17 @@ export default class DataFetcher {
         let fragmentPrevious: string = "";
         let fragmentEnd: string = "";
         const unsortedObs: Record<string, Observation[][]> = {};
-        console.log("fragment");
-        for (let i = 0; i < tiles.length; i++) {
-            const url = `${this.baseUrl}/${tiles[i].xTile}/${tiles[i].yTile}?page=${currDate}`;
+        // console.log("fragment");
+        for (const tile of tiles) {
+            const url = `${this.baseUrl}/${tile.xTile}/${tile.yTile}?page=${currDate}`;
             const response = await this.getDataFragment(url);
+            console.log(response);
+            fragmentStart = response.startDate;
+            fragmentEnd = response.endDate;
+            fragmentPrevious = response.previous;
+            if (response["@graph"].length <= 1) {
+                continue;
+            }
             const fragmentObs = response["@graph"].slice(1);
             const filteredFragmentObs = this.filterObservations(fragmentObs, fromDate, toDate);
             for (const key of Object.keys(filteredFragmentObs)) {
@@ -126,13 +129,10 @@ export default class DataFetcher {
                 }
                 unsortedObs[key].push(filteredFragmentObs[key]);
             }
-            fragmentStart = response.startDate;
-            fragmentEnd = response.endDate;
-            fragmentPrevious = response.previous;
         }
-        console.log(unsortedObs);
+        // console.log(unsortedObs);
         const allFragObs = this.mergeObservations(unsortedObs);
-        console.log(allFragObs);
+        // console.log(allFragObs);
         const response: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
         this.addObservations(allFragObs);
         this.fragEvent.emit(response);
