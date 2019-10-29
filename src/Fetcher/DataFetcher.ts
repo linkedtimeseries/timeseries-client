@@ -37,6 +37,14 @@ export default class DataFetcher {
     private observations: Record<string, Observation[]> = {};
     private fragEvent: FragmentEvent<object> = new FragmentEvent();
 
+    /**
+     * Recursively requests all necessary fragments to fulfill the request
+     * in temporal and spatial dimension.
+     * other methods can subscribe to the received fragments by calling addFragmentListener
+     * @param geometry: array of coordinates containing all the requested tiles
+     * @param fromDate: the start date of the request
+     * @param toDate: the end date of the request
+     */
     public async getPolygonObservations(
         geometry: Array<{lat: number, lng: number}>, fromDate: (Date | string), toDate: (Date | string)) {
         console.log("hallo");
@@ -45,24 +53,31 @@ export default class DataFetcher {
         console.log("request sent");
         console.log(tiles);
         this.observations = {};
-        this.getObservationsRecursive(tiles, fromDate, toDate, toDate, []);
+        this.getObservationsRecursive(tiles, fromDate, toDate, toDate);
     }
 
     public testLib() {
         console.log("test");
     }
 
+    /**
+     * Fetch fragments. After each request, the previous date of the fragment is checked
+     * and also fetched if necessary.
+     * @param tiles: the requested tiles
+     * @param fromDate: the start date of the request
+     * @param currDate: the current date for which the fragment needs to be requested.
+     * @param toDate: the end date of the request.
+     */
     public async getObservationsRecursive(
         tiles: Tile[],
         fromDate: (Date | string),
         currDate: (Date | string),
-        toDate: (Date | string),
-        obs: Observation[]) {
+        toDate: (Date | string)) {
         this.getTilesDataFragments(tiles, fromDate, currDate, toDate).then((response) => {
             if (new Date(response.startDate) > new Date(fromDate)) {
                 console.log("next");
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, obs);
+                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate);
             }
         });
     }
@@ -79,6 +94,14 @@ export default class DataFetcher {
         });
     }
 
+    /**
+     * Fetch all fragments of a list of tiles for a certain date and merges them.
+     * @param tiles: tiles for which data has to be requested.
+     * @param fromDate: the start date of the request
+     * @param currDate: the current date for which all fragments need to be requested.
+     * @param toDate: the end date of the request.
+     * @returns response: the startDate, endDate and previousDate of the fragment.
+     */
     public async getTilesDataFragments(
         tiles: Tile[],
         fromDate: (Date | string),
@@ -116,12 +139,21 @@ export default class DataFetcher {
         return response;
     }
 
+    /**
+     * Fetch a single fragment.
+     * @param url: url for the fragment to be requested.
+     * @returns promise for the requested fragment
+     */
     public async getDataFragment(url: string): Promise<any> {
         console.log(url);
         return fetch(url)
                 .then((response) => response.json());
     }
 
+    /**
+     * Add observations to the global list of observations.
+     * @param obs
+     */
     public addObservations(obs: Record<string, Observation[]>): void {
         for (const key of Object.keys(obs)) {
             if (!(key in this.observations)) {
@@ -132,6 +164,11 @@ export default class DataFetcher {
         }
     }
 
+    /**
+     * Merge observations with the same time range but of different tiles.
+     * @param unsortedObs: the observations that need to be merged
+     * @returns flattened list with all observations sorted according to metric.
+     */
     public mergeObservations(unsortedObs: Record<string, Observation[][]>): Record<string, Observation[]> {
         const mergedObs: Record<string, Observation[]> = {};
         for (const key of Object.keys(unsortedObs)) {
@@ -141,6 +178,11 @@ export default class DataFetcher {
         return mergedObs;
     }
 
+    /**
+     * Merge k lists of observations.
+     * @param unsortedObs
+     * @returns flattened list with sorted observations.
+     */
     public mergeMetric(unsortedObs: Observation[][]): Observation[] {
         const obs: Observation[] = [];
         const indices: number[] = new Array(unsortedObs.length).fill(0);
@@ -165,14 +207,28 @@ export default class DataFetcher {
         return obs;
     }
 
+    /**
+     * Add a listener to the fragEvent. This makes sure that the listener is notified each time
+     * a new fragment is requested and ready.
+     * @param method: the method that will be triggered each time a new fragment is ready
+     */
     public addFragmentListener(method: CallableFunction) {
         this.fragEvent.on((observations) => method(observations));
     }
 
+    /**
+     * Helper method for mergeMetric.
+     * @param hasReachedEnd
+     */
     public finishedMerging(hasReachedEnd: boolean[]): boolean {
         return ! hasReachedEnd.includes(false);
     }
 
+    /**
+     * Helper method for mergeMetric.
+     * @param dates
+     * @param hasReachedEnd
+     */
     public minDate(dates: Date[], hasReachedEnd: boolean[]) {
         let minIndex: number = 0;
         let minDate: Date = dates[minIndex];
@@ -185,6 +241,13 @@ export default class DataFetcher {
         return minDate;
     }
 
+    /**
+     * Filter observations according to fromDate and toDate.
+     * @param obs: the list of observations to be filtered.
+     * @param fromDate: start of the filter interval
+     * @param toDate: end of the filter interval
+     * @returns filtered list of observations
+     */
     public filterObservations(obs: Observation[],
                               fromDate: (string | Date),
                               toDate: (string | Date)): Record<string, Observation[]> {
@@ -210,11 +273,18 @@ export default class DataFetcher {
         return fragmentObservations;
     }
 
+    /**
+     * Get received observations of a certain metric.
+     * @param metric
+     */
     public getCurrentObservations(metric: string) {
         // console.log(this.observations);
         return this.observations[metric];
     }
 
+    /**
+     * Get all received observations.
+     */
     public getAllCurrentObservations() {
         return this.observations;
     }
