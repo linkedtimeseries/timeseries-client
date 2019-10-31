@@ -44,16 +44,21 @@ export default class DataFetcher {
      * @param geometry: array of coordinates containing all the requested tiles
      * @param fromDate: the start date of the request
      * @param toDate: the end date of the request
+     * @param aggrMethod
+     * @param aggrPeriod
      */
     public async getPolygonObservations(
-        geometry: Array<{lat: number, lng: number}>, fromDate: (Date | string), toDate: (Date | string)) {
-        console.log("hallo");
+        geometry: Array<{lat: number, lng: number}>,
+        fromDate: (Date | string),
+        toDate: (Date | string),
+        aggrMethod?: string,
+        aggrPeriod?: string) {
         const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
         console.log("request sent");
         console.log(tiles);
         this.observations = {};
-        this.getObservationsRecursive(tiles, fromDate, toDate, toDate);
+        this.getObservationsRecursive(tiles, fromDate, toDate, toDate, aggrMethod, aggrPeriod);
     }
 
     /**
@@ -63,17 +68,21 @@ export default class DataFetcher {
      * @param fromDate: the start date of the request
      * @param currDate: the current date for which the fragment needs to be requested.
      * @param toDate: the end date of the request.
+     * @param aggrMethod
+     * @param aggrPeriod
      */
     public async getObservationsRecursive(
         tiles: Tile[],
         fromDate: (Date | string),
         currDate: (Date | string),
-        toDate: (Date | string)) {
-        this.getTilesDataFragments(tiles, fromDate, currDate, toDate).then((response) => {
+        toDate: (Date | string),
+        aggrMethod?: string,
+        aggrPeriod?: string) {
+        this.getTilesDataFragments(tiles, fromDate, currDate, toDate, aggrMethod, aggrPeriod).then((response) => {
             if (new Date(response.startDate) > new Date(fromDate)) {
                 console.log("next");
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate);
+                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, aggrMethod, aggrPeriod);
             }
         });
     }
@@ -96,13 +105,17 @@ export default class DataFetcher {
      * @param fromDate: the start date of the request
      * @param currDate: the current date for which all fragments need to be requested.
      * @param toDate: the end date of the request.
+     * @param aggrMethod
+     * @param aggrPeriod
      * @returns response: the startDate, endDate and previousDate of the fragment.
      */
     public async getTilesDataFragments(
         tiles: Tile[],
         fromDate: (Date | string),
         currDate: (Date | string),
-        toDate: (Date | string)): Promise<any> {
+        toDate: (Date | string),
+        aggrMethod?: string,
+        aggrPeriod?: string): Promise<any> {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
@@ -112,7 +125,13 @@ export default class DataFetcher {
         const unsortedObs: Record<string, Observation[][]> = {};
         // console.log("fragment");
         for (const tile of tiles) {
-            const url = `${this.baseUrl}/${tile.xTile}/${tile.yTile}?page=${currDate}`;
+            let url = `${this.baseUrl}/${tile.xTile}/${tile.yTile}?page=${currDate}`;
+            if (typeof aggrMethod !== "undefined") {
+                url += `&aggrMethod=${aggrMethod}`;
+            }
+            if (typeof aggrPeriod !== "undefined") {
+                url += `&aggrPeriod=${aggrPeriod}`;
+            }
             const response = await this.getDataFragment(url);
             console.log(response);
             fragmentStart = response.startDate;
