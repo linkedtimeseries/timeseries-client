@@ -3,6 +3,8 @@ import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
+// tslint:disable-next-line:no-var-requires
+const UriTemplate = require("uritemplate");
 
 export default class DataFetcher {
 
@@ -36,6 +38,7 @@ export default class DataFetcher {
     private basepropertyUrl = "http://example.org/data/airquality";
     private observations: Record<string, Observation[]> = {};
     private fragEvent: FragmentEvent<object> = new FragmentEvent();
+    private urlTemplate = UriTemplate.parse(this.baseUrl + "/{x}/{y}{?page,aggrMethod,aggrPeriod}");
 
     /**
      * Recursively requests all necessary fragments to fulfill the request
@@ -119,24 +122,35 @@ export default class DataFetcher {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
+        if (currDate instanceof Date) {
+            currDate = currDate.toISOString();
+        }
         let fragmentStart: string = "";
         let fragmentPrevious: string = "";
         let fragmentEnd: string = "";
         const unsortedObs: Record<string, Observation[][]> = {};
         // console.log("fragment");
         for (const tile of tiles) {
-            let url = `${this.baseUrl}/${tile.xTile}/${tile.yTile}?page=${currDate}`;
+            const params: any = {};
+            params.x = tile.xTile;
+            params.y = tile.yTile;
+            params.page = currDate;
             if (typeof aggrMethod !== "undefined") {
-                url += `&aggrMethod=${aggrMethod}`;
+                params.aggrMethod = aggrMethod;
             }
             if (typeof aggrPeriod !== "undefined") {
-                url += `&aggrPeriod=${aggrPeriod}`;
+                params.aggrPeriod = aggrPeriod;
             }
+            console.log(params);
+            const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
+            console.log(url);
             const response = await this.getDataFragment(url);
             console.log(response);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
             fragmentPrevious = response.previous;
+            const template = response["dcterms:isPartOf"]["hydra:search"]["hydra:template"];
+            this.urlTemplate = UriTemplate.parse(template);
             if (response["@graph"].length <= 1) {
                 continue;
             }
@@ -191,7 +205,6 @@ export default class DataFetcher {
     public mergeObservations(unsortedObs: Record<string, Observation[][]>): Record<string, Observation[]> {
         const mergedObs: Record<string, Observation[]> = {};
         for (const key of Object.keys(unsortedObs)) {
-            console.log(unsortedObs[key]);
             mergedObs[key] = this.mergeMetric(unsortedObs[key]);
         }
         return mergedObs;
