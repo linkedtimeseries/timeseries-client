@@ -1,4 +1,3 @@
-import {Feature, Polygon} from "@turf/turf";
 import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
@@ -35,10 +34,11 @@ export default class DataFetcher {
     }
 
     private baseUrl =  "http://localhost:5000/data/14";
-    private basepropertyUrl = "http://example.org/data/airquality";
     private observations: Record<string, Observation[]> = {};
     private fragEvent: FragmentEvent<object> = new FragmentEvent();
     private urlTemplate = UriTemplate.parse(this.baseUrl + "/{x}/{y}{?page,aggrMethod,aggrPeriod}");
+    private startDate: Date = new Date();
+    private endDate: Date = new Date();
 
     /**
      * Recursively requests all necessary fragments to fulfill the request
@@ -61,6 +61,10 @@ export default class DataFetcher {
         console.log("request sent");
         console.log(tiles);
         this.observations = {};
+        if (typeof toDate === "string") {
+            toDate = new Date(toDate);
+        }
+        this.endDate = toDate;
         this.getObservationsRecursive(tiles, fromDate, toDate, toDate, aggrMethod, aggrPeriod);
     }
 
@@ -141,11 +145,8 @@ export default class DataFetcher {
             if (typeof aggrPeriod !== "undefined") {
                 params.aggrPeriod = aggrPeriod;
             }
-            console.log(params);
             const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
-            console.log(url);
             const response = await this.getDataFragment(url);
-            console.log(response);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
             fragmentPrevious = response.previous;
@@ -167,6 +168,7 @@ export default class DataFetcher {
         const allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
         const response: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
+        this.startDate = new Date(fragmentStart);
         this.addObservations(allFragObs);
         this.fragEvent.emit(response);
         return response;
@@ -292,7 +294,6 @@ export default class DataFetcher {
         }
 
         const fragmentObservations: Record<string, Observation[]> = {};
-        // will be expanded later on
         obs.forEach( (ob) => {
             const resultDate = new Date(ob.resultTime);
             if (resultDate <= toDate && resultDate >= fromDate) {
@@ -310,8 +311,18 @@ export default class DataFetcher {
      * @param metric
      */
     public getCurrentObservations(metric: string) {
-        // console.log(this.observations);
         return this.observations[metric];
+    }
+
+    public containsInterval(metric: string, startDate: (Date | string), endDate: (Date | string)): boolean {
+        if (typeof startDate === "string") {
+            startDate = new Date(startDate);
+        }
+        if (typeof endDate === "string") {
+            endDate = new Date(endDate);
+        }
+        return this.startDate <= startDate
+            && this.endDate >= endDate;
     }
 
     /**

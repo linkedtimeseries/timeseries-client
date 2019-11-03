@@ -1,5 +1,5 @@
 
-import { bboxPolygon, booleanContains, Feature, Polygon, polygon, Position, union} from "@turf/turf";
+import { bboxPolygon, booleanContains, degreesToRadians, Feature, Polygon, polygon, Position, union} from "@turf/turf";
 import globalMercator = require("global-mercator");
 import Config from "../Config/Config";
 import {Tile} from "./Tile";
@@ -17,13 +17,12 @@ export interface ITilesBoundingBox {
 }
 
 export default class PolygonUtils {
-    private polygon: Feature<Polygon>;
+    private readonly polygon: Feature<Polygon>;
     private readonly bbox: IBoundingBox;
     private readonly tBoundingBox: ITilesBoundingBox;
 
     constructor(input: Array<{lat: number, lng: number}>) {
         this.polygon = this.createPolygon(input);
-        // console.log(this.polygon);
         this.bbox = this.calculateBBox(input);
         this.tBoundingBox = this.calculateTilesWithinBBox();
     }
@@ -35,7 +34,6 @@ export default class PolygonUtils {
             {tile: Feature<Polygon>, row: number, col: number} | undefined
             ) =
             this.findFirstTileInGrid(tilePolys);
-        console.log(tilePolys);
         if (typeof firstPolyWithIndex === "undefined") {
             return;
         }
@@ -59,13 +57,10 @@ export default class PolygonUtils {
 
     private createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
         const turfCoords: Position[] = [];
-        // console.log(coords);
         coords.forEach( (coord) => {
-            // console.log(coord);
             turfCoords.push([coord.lat, coord.lng]);
         });
         turfCoords.push([coords[0].lat, coords[0].lng]);
-        // console.log("turfcoords: " + turfCoords);
         return polygon([turfCoords]);
     }
 
@@ -80,7 +75,6 @@ export default class PolygonUtils {
         let maxLon = - Number.MAX_SAFE_INTEGER;
 
         coords.forEach( (coord) => {
-            // console.log(coord);
             if (coord.lat < minLat) {
                 minLat = coord.lat;
             }
@@ -94,28 +88,24 @@ export default class PolygonUtils {
                 maxLon = coord.lng;
             }
         });
-        // console.log({minLat, minLon, maxLat, maxLon});
         return {minLat, minLon, maxLat, maxLon};
     }
 
     private getTile(lat: number, lon: number, zoom: number): Tile {
         const xtile: number = Math.floor( (lon + 180) / 360 * Math.pow(2, zoom) );
-        const ytile: number = Math.floor( (1 - Math.log(Math.tan(this.toRad(lat)) + 1 /
-            Math.cos(this.toRad(lat))) / Math.PI) / 2 * Math.pow(2, zoom) );
+        const ytile: number = Math.floor( (1 - Math.log(Math.tan(degreesToRadians(lat)) + 1 /
+            Math.cos(degreesToRadians(lat))) / Math.PI) / 2 * Math.pow(2, zoom) );
         return {xTile: xtile, yTile: ytile, zoom};
     }
 
     private calculateTilesWithinBBox(): ITilesBoundingBox {
         const minTile = this.getTile(this.bbox.minLat, this.bbox.minLon, Config.context.zoom);
-        // console.log(minTile);
         const maxTile = this.getTile(this.bbox.maxLat, this.bbox.maxLon, Config.context.zoom);
-        // console.log(maxTile);
 
         minTile.xTile += 1;
         minTile.yTile -= 1;
         maxTile.xTile -= 1;
         maxTile.yTile += 1;
-        console.log({minTile, maxTile});
         return {minTile, maxTile};
     }
 
@@ -158,8 +148,6 @@ export default class PolygonUtils {
     ): Feature<Polygon> {
         if (row >= 0 && row < tilePolys.length &&
             col >= 0 && col < tilePolys[0].length && typeof tilePolys[row][col] !== "undefined") {
-            console.log(tilePolys[row][col]);
-            console.log(currTile);
             currTile =
                 union(currTile, tilePolys[row][col] as Feature<Polygon>) as
                     Feature<Polygon>;
@@ -208,16 +196,12 @@ export default class PolygonUtils {
         for (let currX = this.tBoundingBox.minTile.xTile; currX <= this.tBoundingBox.maxTile.xTile; currX++) {
             for (let currY = this.tBoundingBox.maxTile.yTile; currY <= this.tBoundingBox.minTile.yTile; currY++) {
                 const bb = globalMercator.googleToBBox([currX, currY, Config.context.zoom]);
-                // console.log(bb);
                 const bboxPoly: Feature<Polygon> = bboxPolygon([bb[1], bb[0], bb[3], bb[2]]);
                 if (booleanContains(this.polygon, bboxPoly)) {
-                    // console.log("row: " + (currY - offsetYtile).toString());
-                    // console.log("col: " + (currX - offsetXtile).toString());
                     tilePolys[currY - offsetYtile][currX - offsetXtile] = new Tile(currX, currY, Config.context.zoom);
                 }
             }
         }
-        console.log(tilePolys);
         return tilePolys;
     }
 
@@ -238,10 +222,4 @@ export default class PolygonUtils {
         newCoordinates.push(coordinates[coordinates.length - 1]);
         return polygon([newCoordinates]);
     }
-
-    // TODO: replace this with turf builtin
-    private toRad(num: number) {
-        return num * Math.PI / 180;
-    }
-
 }
