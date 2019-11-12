@@ -37,7 +37,7 @@ To be notified when new data arrives, methods can subscribe to the datafetcher u
 
 Example: 
 
-´´´
+```
 let datafetcher = new TimeSeriesClientSide.DataFetcher();
 // Subscribe a method
 datafetcher.addFragmentListener(showData);
@@ -53,7 +53,7 @@ datafetcher.getPolygonObservations([{lat: 51.24925948378325, lng: 4.391884628594
 function showData(data) {
   console.log(datafetcher.getAllObservations());
 }
-´´´
+```
 
 ## Demo
 
