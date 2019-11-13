@@ -133,6 +133,7 @@ export default class DataFetcher {
         let fragmentPrevious: string = "";
         let fragmentEnd: string = "";
         const unsortedObs: Record<string, Observation[][]> = {};
+        let response: any = {};
         // console.log("fragment");
         for (const tile of tiles) {
             const params: any = {};
@@ -146,7 +147,7 @@ export default class DataFetcher {
                 params.aggrPeriod = aggrPeriod;
             }
             const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
-            const response = await this.getDataFragment(url);
+            response = await this.getDataFragment(url);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
             fragmentPrevious = response.previous;
@@ -164,14 +165,108 @@ export default class DataFetcher {
                 unsortedObs[key].push(filteredFragmentObs[key]);
             }
         }
-        // console.log(unsortedObs);
-        const allFragObs = this.mergeObservations(unsortedObs);
+        console.log(unsortedObs);
+        let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
-        const response: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
+        const responseAggrMethod = DataFetcher.parseURL(response["@id"]).searchObject.aggrMethod;
+        // console.log(allFragObs);
+        allFragObs = this.mergeAggregates(allFragObs, responseAggrMethod, tiles.length);
+        const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
         this.startDate = new Date(fragmentStart);
         this.addObservations(allFragObs);
-        this.fragEvent.emit(response);
-        return response;
+        this.fragEvent.emit(event);
+        return event;
+    }
+
+    public mergeAggregates(obs: Record<string, Observation[]>,
+                           aggrMethod: string,
+                           nrTiles: number): Record<string, Observation[]> {
+        if (aggrMethod === "average") {
+            const mergedAverages: Record<string, Observation[]> = {};
+            Object.entries(obs).forEach(
+                ([key, values]) => mergedAverages[key] = this.mergeAverages(values));
+            return mergedAverages;
+        } else if (aggrMethod === "median") {
+            // const mergedMedians: Record<string, Observation[]> = {};
+            // Object.entries(obs).forEach(
+            //     ([key, values]) => mergedMedians[key] = this.mergeMedians(values, nrTiles));
+            return obs;
+        }
+        return obs;
+    }
+
+    public mergeAverages(obs: any[]): any[] {
+        let currOb = obs[0];
+        let total = 0;
+        let count = 0;
+        let sensors: Set<any> = new Set([]);
+        console.log(obs);
+        const mergedObs: any[] = [];
+        for (const ob of obs) {
+            if (! (ob.resultTime instanceof Date)) {
+                ob.resultTime = new Date(ob.resultTime);
+            }
+
+            if (currOb.resultTime.getTime() !== ob.resultTime.getTime()) {
+                if (count > 0) {
+                    const newOb = JSON.parse(JSON.stringify(currOb));
+                    newOb.Output = {count, total};
+                    newOb.madeBySensor = Array.from(sensors);
+                    newOb.hasSimpleResult = total / count;
+                    mergedObs.push(newOb);
+                }
+                currOb = ob;
+                total = 0;
+                count = 0;
+                sensors.clear();
+            }
+            if ("Output" in ob) {
+                total += ob.Output.total;
+                count += ob.Output.count;
+                if (sensors.size > 0) {
+                    sensors = new Set([...Array.from(sensors), ...ob.madeBySensor]);
+                } else {
+                    sensors = new Set(ob.madeBySensor);
+                }
+            }
+        }
+        if (count > 0) {
+            const ob = obs[obs.length - 1];
+            ob.Output = {count, total};
+            ob.madeBySensor = Array.from(sensors);
+            ob.hasSimpleResult = total / count;
+            mergedObs.push(ob);
+        }
+        console.log(mergedObs);
+        return mergedObs;
+    }
+
+    public mergeMedians(obs: any[], nrTiles: number): any[] {
+        let i = 0;
+        const mergedObs: any[] = [];
+        console.log(obs);
+        while (i < obs.length) {
+            const obsSlice = obs.slice(i, i + nrTiles);
+            obs[i].hasSimpleResult = this.getMedian(obsSlice);
+            mergedObs.push(obs[i]);
+            i += nrTiles;
+        }
+        // console.log(mergedObs);
+        return mergedObs;
+    }
+
+    public getMedian(obs: any[]) {
+        if (obs.length === 0) {
+            return 0;
+        }
+        obs.sort((a, b) => a.hasSimpleResult - b.hasSimpleResult);
+        const half = Math.floor(obs.length / 2);
+
+        if (obs.length % 2) {
+            return obs[half].hasSimpleResult;
+        }
+
+        return (obs[half - 1].hasSimpleResult + obs[half].hasSimpleResult) / 2.0;
     }
 
     /**
@@ -314,7 +409,7 @@ export default class DataFetcher {
         return this.observations[metric];
     }
 
-    public containsInterval(metric: string, startDate: (Date | string), endDate: (Date | string)): boolean {
+    public containsInterval(startDate: (Date | string), endDate: (Date | string)): boolean {
         if (typeof startDate === "string") {
             startDate = new Date(startDate);
         }
