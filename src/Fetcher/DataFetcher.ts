@@ -2,6 +2,9 @@ import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
+import {type} from "os";
+// tslint:disable-next-line:no-var-requires
+const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
 const UriTemplate = require("uritemplate");
 
@@ -33,7 +36,7 @@ export default class DataFetcher {
         };
     }
 
-    private baseUrl =  "http://localhost:5000/data/14";
+    private baseUrl =  process.env.BASEURL;
     private observations: Record<string, Observation[]> = {};
     private fragEvent: FragmentEvent<object> = new FragmentEvent();
     private urlTemplate = UriTemplate.parse(this.baseUrl + "/{x}/{y}{?page,aggrMethod,aggrPeriod}");
@@ -65,7 +68,7 @@ export default class DataFetcher {
             toDate = new Date(toDate);
         }
         this.endDate = toDate;
-        this.getObservationsRecursive(tiles, fromDate, toDate, toDate, aggrMethod, aggrPeriod);
+        this.getObservationsRecursive(tiles, fromDate, toDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
     }
 
     /**
@@ -75,6 +78,7 @@ export default class DataFetcher {
      * @param fromDate: the start date of the request
      * @param currDate: the current date for which the fragment needs to be requested.
      * @param toDate: the end date of the request.
+     * @param polygonUtils
      * @param aggrMethod
      * @param aggrPeriod
      */
@@ -83,13 +87,15 @@ export default class DataFetcher {
         fromDate: (Date | string),
         currDate: (Date | string),
         toDate: (Date | string),
+        polygonUtils: PolygonUtils,
         aggrMethod?: string,
         aggrPeriod?: string) {
-        this.getTilesDataFragments(tiles, fromDate, currDate, toDate, aggrMethod, aggrPeriod).then((response) => {
+        this.getTilesDataFragmentsSpatial(tiles, fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod)
+            .then((response) => {
             if (new Date(response.startDate) > new Date(fromDate)) {
                 console.log("next");
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, aggrMethod, aggrPeriod);
+                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
             }
         });
     }
@@ -106,23 +112,60 @@ export default class DataFetcher {
         });
     }
 
+    public getAggrInterval(aggrPeriod?: string) {
+        if (typeof aggrPeriod === "undefined") {
+            return 0;
+        }
+        switch (aggrPeriod) {
+            case "min":
+                return 300000;
+            case "hour":
+                return 3600000;
+            case "day":
+                return 86400000;
+            case "month":
+                return 2592000000;
+            case "year":
+                return 31556952000;
+        }
+    }
+
+    public async getTilesDataFragmentsTemporal(
+        tiles: Tile[],
+        fromDate: (Date | string),
+        currDate: (Date | string),
+        toDate: (Date | string),
+        polygonUtils: PolygonUtils,
+        aggrMethod?: string,
+        aggrPeriod?: string,
+    ): Promise<any> {
+        const aggrInterval = this.getAggrInterval(aggrPeriod);
+        const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
+        this.startDate = new Date(fragmentStart);
+        this.addObservations(allFragObs);
+        this.fragEvent.emit(event);
+        return event;
+    }
+
     /**
      * Fetch all fragments of a list of tiles for a certain date and merges them.
      * @param tiles: tiles for which data has to be requested.
      * @param fromDate: the start date of the request
      * @param currDate: the current date for which all fragments need to be requested.
      * @param toDate: the end date of the request.
+     * @param polygonUtils
      * @param aggrMethod
      * @param aggrPeriod
      * @returns response: the startDate, endDate and previousDate of the fragment.
      */
-    public async getTilesDataFragments(
+    public async getTilesDataFragmentsSpatial(
         tiles: Tile[],
         fromDate: (Date | string),
         currDate: (Date | string),
         toDate: (Date | string),
+        polygonUtils: PolygonUtils,
         aggrMethod?: string,
-        aggrPeriod?: string): Promise<any> {
+        aggrPeriod?: string): Record<string, Observation[]> {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
@@ -157,7 +200,7 @@ export default class DataFetcher {
                 continue;
             }
             const fragmentObs = response["@graph"].slice(1);
-            const filteredFragmentObs = this.filterObservations(fragmentObs, fromDate, toDate);
+            const filteredFragmentObs = this.filterObservations(fragmentObs, fromDate, toDate, polygonUtils);
             for (const key of Object.keys(filteredFragmentObs)) {
                 if (! (key in unsortedObs)) {
                     unsortedObs[key] = [];
@@ -165,26 +208,22 @@ export default class DataFetcher {
                 unsortedObs[key].push(filteredFragmentObs[key]);
             }
         }
-        console.log(unsortedObs);
         let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
         const responseAggrMethod = DataFetcher.parseURL(response["@id"]).searchObject.aggrMethod;
         // console.log(allFragObs);
-        allFragObs = this.mergeAggregates(allFragObs, responseAggrMethod, tiles.length);
-        const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
-        this.startDate = new Date(fragmentStart);
-        this.addObservations(allFragObs);
-        this.fragEvent.emit(event);
-        return event;
+        allFragObs = this.mergeAggregatesSpatial(allFragObs, responseAggrMethod, tiles.length);
+        console.log(allFragObs);
+
     }
 
-    public mergeAggregates(obs: Record<string, Observation[]>,
-                           aggrMethod: string,
-                           nrTiles: number): Record<string, Observation[]> {
+    public mergeAggregatesSpatial(obs: Record<string, Observation[]>,
+                                  aggrMethod: string,
+                                  nrTiles: number): Record<string, Observation[]> {
         if (aggrMethod === "average") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
-                ([key, values]) => mergedAverages[key] = this.mergeAverages(values));
+                ([key, values]) => mergedAverages[key] = this.mergeAveragesSpatial(values));
             return mergedAverages;
         } else if (aggrMethod === "median") {
             // const mergedMedians: Record<string, Observation[]> = {};
@@ -195,19 +234,15 @@ export default class DataFetcher {
         return obs;
     }
 
-    public mergeAverages(obs: any[]): any[] {
+    public mergeAveragesSpatial(obs: any[]): any[] {
         let currOb = obs[0];
         let total = 0;
         let count = 0;
         let sensors: Set<any> = new Set([]);
-        console.log(obs);
+        // console.log(obs);
         const mergedObs: any[] = [];
         for (const ob of obs) {
-            if (! (ob.resultTime instanceof Date)) {
-                ob.resultTime = new Date(ob.resultTime);
-            }
-
-            if (currOb.resultTime.getTime() !== ob.resultTime.getTime()) {
+            if (currOb.resultTime !== ob.resultTime) {
                 if (count > 0) {
                     const newOb = JSON.parse(JSON.stringify(currOb));
                     newOb.Output = {count, total};
@@ -237,14 +272,14 @@ export default class DataFetcher {
             ob.hasSimpleResult = total / count;
             mergedObs.push(ob);
         }
-        console.log(mergedObs);
+        // console.log(mergedObs);
         return mergedObs;
     }
 
     public mergeMedians(obs: any[], nrTiles: number): any[] {
         let i = 0;
         const mergedObs: any[] = [];
-        console.log(obs);
+        // console.log(obs);
         while (i < obs.length) {
             const obsSlice = obs.slice(i, i + nrTiles);
             obs[i].hasSimpleResult = this.getMedian(obsSlice);
@@ -267,6 +302,12 @@ export default class DataFetcher {
         }
 
         return (obs[half - 1].hasSimpleResult + obs[half].hasSimpleResult) / 2.0;
+    }
+
+    public parseISOString(s: string) {
+        const b = s.split(/\D+/);
+        return new Date(Date.UTC(Number(b[0]), Number(b[1]) - 1,
+            Number(b[2]), Number(b[3]), Number(b[4]), Number(b[5]), Number(b[6])));
     }
 
     /**
@@ -375,11 +416,13 @@ export default class DataFetcher {
      * @param obs: the list of observations to be filtered.
      * @param fromDate: start of the filter interval
      * @param toDate: end of the filter interval
+     * @param polygonUtils
      * @returns filtered list of observations
      */
     public filterObservations(obs: Observation[],
                               fromDate: (string | Date),
-                              toDate: (string | Date)): Record<string, Observation[]> {
+                              toDate: (string | Date),
+                              polygonUtils: PolygonUtils): Record<string, Observation[]> {
         if (typeof fromDate === "string") {
             fromDate = new Date(fromDate);
         }
@@ -387,11 +430,13 @@ export default class DataFetcher {
         if (typeof toDate === "string") {
             toDate = new Date(toDate);
         }
-
         const fragmentObservations: Record<string, Observation[]> = {};
         obs.forEach( (ob) => {
             const resultDate = new Date(ob.resultTime);
-            if (resultDate <= toDate && resultDate >= fromDate) {
+            if (resultDate <= toDate && resultDate >= fromDate
+                && (("lat" in ob && polygonUtils.polygonContainsPoint({lat: ob.lat, lon: ob.long}))
+                    || ! ("lat" in ob))) {
+                console.log("erin");
                 if (!(ob.observedProperty in fragmentObservations)) {
                     fragmentObservations[ob.observedProperty] = [];
                 }

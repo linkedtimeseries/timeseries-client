@@ -1,5 +1,6 @@
 
-import { bboxPolygon, booleanContains, degreesToRadians, Feature, Polygon, polygon, Position, union} from "@turf/turf";
+import { bboxPolygon, booleanContains, booleanDisjoint,
+    degreesToRadians, Feature, intersect, point, Polygon, polygon, Position, union} from "@turf/turf";
 import globalMercator = require("global-mercator");
 import Config from "../Config/Config";
 import {Tile} from "./Tile";
@@ -25,6 +26,7 @@ export default class PolygonUtils {
         this.polygon = this.createPolygon(input);
         this.bbox = this.calculateBBox(input);
         this.tBoundingBox = this.calculateTilesWithinBBox();
+        console.log(this.tBoundingBox);
     }
 
     public calculateTilePolygon(): Feature<Polygon> | undefined {
@@ -53,6 +55,10 @@ export default class PolygonUtils {
             });
         });
         return tiles;
+    }
+
+    public polygonContainsPoint(p: {lat: number, lon: number}) {
+        return booleanContains(this.polygon, point([p.lat, p.lon]));
     }
 
     private createPolygon(coords: Array<{lat: number, lng: number}>): Feature<Polygon> {
@@ -102,10 +108,6 @@ export default class PolygonUtils {
         const minTile = this.getTile(this.bbox.minLat, this.bbox.minLon, Config.context.zoom);
         const maxTile = this.getTile(this.bbox.maxLat, this.bbox.maxLon, Config.context.zoom);
 
-        minTile.xTile += 1;
-        minTile.yTile -= 1;
-        maxTile.xTile -= 1;
-        maxTile.yTile += 1;
         return {minTile, maxTile};
     }
 
@@ -160,6 +162,7 @@ export default class PolygonUtils {
     private calculateBBoxTilesWithinPolygon(): Array<Array<Feature<Polygon> | undefined>> {
         const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
         const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
+
         const tilePolys: Array<Array<Feature<Polygon> | undefined>> = [];
         for (let i = 0; i < rows; i++) {
             tilePolys[i] = [];
@@ -184,6 +187,8 @@ export default class PolygonUtils {
     private calculateTileGridWithinPolygon(): Array<Array<Tile | undefined>> {
         const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
         const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
+        console.log(rows);
+        console.log(cols);
         const tilePolys: Array<Array<Tile | undefined>> = [];
         for (let i = 0; i < rows; i++) {
             tilePolys[i] = [];
@@ -197,7 +202,13 @@ export default class PolygonUtils {
             for (let currY = this.tBoundingBox.maxTile.yTile; currY <= this.tBoundingBox.minTile.yTile; currY++) {
                 const bb = globalMercator.googleToBBox([currX, currY, Config.context.zoom]);
                 const bboxPoly: Feature<Polygon> = bboxPolygon([bb[1], bb[0], bb[3], bb[2]]);
-                if (booleanContains(this.polygon, bboxPoly)) {
+                console.log("run");
+                console.log(this.polygon);
+                console.log(bboxPoly);
+                console.log(intersect(this.polygon, bboxPoly));
+                console.log(booleanDisjoint(this.polygon, bboxPoly));
+                if (! booleanDisjoint(this.polygon, bboxPoly)) {
+                    console.log("succes");
                     tilePolys[currY - offsetYtile][currX - offsetXtile] = new Tile(currX, currY, Config.context.zoom);
                 }
             }
