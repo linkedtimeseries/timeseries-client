@@ -1,8 +1,8 @@
+import {type} from "os";
 import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
-import {type} from "os";
 // tslint:disable-next-line:no-var-requires
 const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
@@ -90,9 +90,9 @@ export default class DataFetcher {
         polygonUtils: PolygonUtils,
         aggrMethod?: string,
         aggrPeriod?: string) {
-        this.getTilesDataFragmentsSpatial(tiles, fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod)
+        this.getTilesDataFragmentsTemporal(tiles, fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod)
             .then((response) => {
-            if (new Date(response.startDate) > new Date(fromDate)) {
+            if (new Date(this.startDate) > new Date(fromDate)) {
                 console.log("next");
                 const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
                 this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
@@ -113,8 +113,9 @@ export default class DataFetcher {
     }
 
     public getAggrInterval(aggrPeriod?: string) {
+        // if undefined, then there is no aggregation period and we only need to run getTilesDataFragmentsTemporal once
         if (typeof aggrPeriod === "undefined") {
-            return 0;
+            return 1;
         }
         switch (aggrPeriod) {
             case "min":
@@ -127,9 +128,13 @@ export default class DataFetcher {
                 return 2592000000;
             case "year":
                 return 31556952000;
+            default:
+                return 1;
         }
     }
-
+    // TODO: edge case waarbij aggrInterval niet overeenkomt met requeste interval
+    // vb : |------------| request interval
+    //     |---|---|---|---| aggrIntervallen
     public async getTilesDataFragmentsTemporal(
         tiles: Tile[],
         fromDate: (Date | string),
@@ -139,12 +144,69 @@ export default class DataFetcher {
         aggrMethod?: string,
         aggrPeriod?: string,
     ): Promise<any> {
+
         const aggrInterval = this.getAggrInterval(aggrPeriod);
-        const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
-        this.startDate = new Date(fragmentStart);
-        this.addObservations(allFragObs);
-        this.fragEvent.emit(event);
-        return event;
+        if (new Date(currDate).getTime() + aggrInterval >= new Date(toDate).getTime()) {
+            return;
+        }
+        let aggrCurrent = new Date(currDate).getTime();
+        const aggrEnd = aggrCurrent + aggrInterval;
+        const temporalObs: Record<string, Observation[]> = {};
+        let responseAggrMethod: string = "";
+        while (aggrCurrent < aggrEnd) {
+            const fragResponse = await
+                this.getTilesDataFragmentsSpatial(tiles,
+                    fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
+
+            // const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
+            this.startDate = new Date(fragResponse.fragmentStart);
+            responseAggrMethod = fragResponse.responseAggrMethod;
+            aggrCurrent +=
+                new Date(fragResponse.fragmentEnd).getTime() - new Date(fragResponse.fragmentStart).getTime();
+            for (const key of Object.keys(fragResponse.fragObs)) {
+                if (! (key in temporalObs)) {
+                    temporalObs[key] = [];
+                }
+                temporalObs[key] = fragResponse.fragObs[key].concat(temporalObs[key]);
+            }
+        }
+        const mergedObs = this.mergeAggregatesTemporal(temporalObs, responseAggrMethod);
+        this.addObservations(mergedObs);
+        // this.fragEvent.emit(event);
+        return this.startDate;
+    }
+
+    public mergeAggregatesTemporal(obs: Record<string, Observation[]>,
+                                   aggrMethod: string): Record<string, Observation[]> {
+        if (aggrMethod === "average") {
+            const mergedAverages: Record<string, Observation[]> = {};
+            Object.entries(obs).forEach(
+                ([key, values]) => mergedAverages[key] = this.mergeAveragesTemporal(values));
+            return mergedAverages;
+        }
+        return obs;
+    }
+
+    public mergeAveragesTemporal(obs: any[]) {
+        const startOb = obs[0];
+        let count: number = 0;
+        let total: number = 0;
+        let sensors: Set<any> = new Set([]);
+        for (const ob of obs) {
+            if ("Output" in ob) {
+                total += ob.Output.total;
+                count += ob.Output.count;
+                if (sensors.size > 0) {
+                    sensors = new Set([...Array.from(sensors), ...ob.madeBySensor]);
+                } else {
+                    sensors = new Set(ob.madeBySensor);
+                }
+            }
+        }
+        startOb.Output = {count, total};
+        startOb.madeBySensor = Array.from(sensors);
+        startOb.hasSimpleResult = total / count;
+        return startOb;
     }
 
     /**
@@ -165,7 +227,8 @@ export default class DataFetcher {
         toDate: (Date | string),
         polygonUtils: PolygonUtils,
         aggrMethod?: string,
-        aggrPeriod?: string): Record<string, Observation[]> {
+        aggrPeriod?: string): Promise<{fragObs: Record<string, Observation[]>,
+        fragmentStart: string, fragmentEnd: string, fragmentPrevious: string, responseAggrMethod: string}> {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
@@ -214,7 +277,7 @@ export default class DataFetcher {
         // console.log(allFragObs);
         allFragObs = this.mergeAggregatesSpatial(allFragObs, responseAggrMethod, tiles.length);
         console.log(allFragObs);
-
+        return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious, responseAggrMethod};
     }
 
     public mergeAggregatesSpatial(obs: Record<string, Observation[]>,
