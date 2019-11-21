@@ -1,4 +1,4 @@
-import {type} from "os";
+import Config from "../Config/Config";
 import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
@@ -55,20 +55,49 @@ export default class DataFetcher {
      */
     public async getPolygonObservations(
         geometry: Array<{lat: number, lng: number}>,
-        fromDate: (Date | string),
-        toDate: (Date | string),
+        fromDate: string,
+        toDate: string,
         aggrMethod?: string,
         aggrPeriod?: string) {
         const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
         console.log("request sent");
         console.log(tiles);
+        fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
+        toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
         this.observations = {};
-        if (typeof toDate === "string") {
-            toDate = new Date(toDate);
-        }
-        this.endDate = toDate;
+        this.endDate = new Date(toDate);
+
         this.getObservationsRecursive(tiles, fromDate, toDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
+    }
+
+    public dateOffsetCorrection(datestr: string, aggrPeriod?: string) {
+        let date: Date = new Date(datestr);
+        if (typeof aggrPeriod === "undefined") {
+            return datestr;
+        }
+        switch (aggrPeriod) {
+            case "min":
+                if (date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
+                    date = new Date(date.getTime() + Config.context.min);
+                    date.setUTCSeconds(0, 0);
+                }
+                return date.toISOString();
+            case "hour":
+                if (date.getUTCMinutes() !== 0 || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
+                    date = new Date(date.getTime() + Config.context.hour);
+                    date.setUTCMinutes(0, 0, 0);
+                }
+                return date.toISOString();
+            case "day":
+                if (date.getUTCHours() ||
+                    date.getUTCMinutes() !== 0 || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
+                    date = new Date(date.getTime() + Config.context.day);
+                    date.setUTCHours(0, 0, 0, 0);
+                }
+                return date.toISOString();
+        }
+        return datestr;
     }
 
     /**
@@ -119,18 +148,25 @@ export default class DataFetcher {
         }
         switch (aggrPeriod) {
             case "min":
-                return 300000;
+                return Config.context.min;
             case "hour":
-                return 3600000;
+                return Config.context.hour;
             case "day":
-                return 86400000;
+                return Config.context.day;
             case "month":
-                return 2592000000;
+                return Config.context.month;
             case "year":
-                return 31556952000;
+                return Config.context.year;
             default:
                 return 1;
         }
+    }
+
+    public dateCheck(date: (Date | string)) {
+        if (typeof date === "string") {
+            date = new Date(date);
+        }
+        return date;
     }
     // TODO: edge case waarbij aggrInterval niet overeenkomt met requeste interval
     // vb : |------------| request interval
@@ -144,16 +180,18 @@ export default class DataFetcher {
         aggrMethod?: string,
         aggrPeriod?: string,
     ): Promise<any> {
-
+        fromDate = this.dateCheck(fromDate);
+        toDate = this.dateCheck(toDate);
+        currDate = this.dateCheck(currDate);
         const aggrInterval = this.getAggrInterval(aggrPeriod);
-        if (new Date(currDate).getTime() + aggrInterval >= new Date(toDate).getTime()) {
+        if (currDate.getTime() - aggrInterval >= fromDate.getTime()) {
             return;
         }
-        let aggrCurrent = new Date(currDate).getTime();
-        const aggrEnd = aggrCurrent + aggrInterval;
+        let aggrCurrent = currDate.getTime();
+        const aggrEnd = aggrCurrent - aggrInterval;
         const temporalObs: Record<string, Observation[]> = {};
         let responseAggrMethod: string = "";
-        while (aggrCurrent < aggrEnd) {
+        while (aggrCurrent >= aggrEnd) {
             const fragResponse = await
                 this.getTilesDataFragmentsSpatial(tiles,
                     fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
@@ -161,7 +199,7 @@ export default class DataFetcher {
             // const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
             this.startDate = new Date(fragResponse.fragmentStart);
             responseAggrMethod = fragResponse.responseAggrMethod;
-            aggrCurrent +=
+            aggrCurrent -=
                 new Date(fragResponse.fragmentEnd).getTime() - new Date(fragResponse.fragmentStart).getTime();
             for (const key of Object.keys(fragResponse.fragObs)) {
                 if (! (key in temporalObs)) {
