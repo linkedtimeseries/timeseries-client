@@ -3,6 +3,7 @@ import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
+import {start} from "repl";
 // tslint:disable-next-line:no-var-requires
 const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
@@ -65,6 +66,8 @@ export default class DataFetcher {
         console.log(tiles);
         fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
         toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
+        console.log("[LOG] fromDate after offset correction: " + fromDate);
+        console.log("[LOG] toDate after offset correction: " + toDate);
         this.observations = {};
         this.endDate = new Date(toDate);
 
@@ -121,11 +124,14 @@ export default class DataFetcher {
         aggrPeriod?: string) {
         this.getTilesDataFragmentsTemporal(tiles, fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod)
             .then((response) => {
-            if (new Date(this.startDate) > new Date(fromDate)) {
-                console.log("next");
-                const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
-                this.getObservationsRecursive(tiles, fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
-            }
+                console.log("[LOG] response after temporal: " + response);
+                if (new Date(this.startDate) > new Date(fromDate)) {
+                    console.log("next");
+                    const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
+                    this.getObservationsRecursive(tiles,
+                        fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
+                }
+                console.log("[LOG] finished");
         });
     }
 
@@ -144,7 +150,7 @@ export default class DataFetcher {
     public getAggrInterval(aggrPeriod?: string) {
         // if undefined, then there is no aggregation period and we only need to run getTilesDataFragmentsTemporal once
         if (typeof aggrPeriod === "undefined") {
-            return 1;
+            return 0;
         }
         switch (aggrPeriod) {
             case "min":
@@ -158,7 +164,7 @@ export default class DataFetcher {
             case "year":
                 return Config.context.year;
             default:
-                return 1;
+                return 0;
         }
     }
 
@@ -184,13 +190,21 @@ export default class DataFetcher {
         toDate = this.dateCheck(toDate);
         currDate = this.dateCheck(currDate);
         const aggrInterval = this.getAggrInterval(aggrPeriod);
-        if (currDate.getTime() - aggrInterval >= fromDate.getTime()) {
-            return;
+        console.log("[LOG] aggrInterval: " + aggrInterval);
+        if (currDate.getTime() - aggrInterval < fromDate.getTime()) {
+            console.log("[LOG] currDate: " + currDate);
+            console.log("[LOG] fromDate: " + fromDate);
+            console.log("[LOG] currDate >= fromDate");
+            this.startDate = currDate;
+            return {startDate: currDate};
         }
         let aggrCurrent = currDate.getTime();
         const aggrEnd = aggrCurrent - aggrInterval;
         const temporalObs: Record<string, Observation[]> = {};
         let responseAggrMethod: string = "";
+        let startDate: string = "";
+        let previousDate: string = "";
+        let endDate: string = "";
         while (aggrCurrent >= aggrEnd) {
             const fragResponse = await
                 this.getTilesDataFragmentsSpatial(tiles,
@@ -199,6 +213,9 @@ export default class DataFetcher {
             // const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
             this.startDate = new Date(fragResponse.fragmentStart);
             responseAggrMethod = fragResponse.responseAggrMethod;
+            startDate = fragResponse.fragmentStart;
+            previousDate = fragResponse.fragmentPrevious;
+            endDate = fragResponse.fragmentEnd;
             aggrCurrent -=
                 new Date(fragResponse.fragmentEnd).getTime() - new Date(fragResponse.fragmentStart).getTime();
             for (const key of Object.keys(fragResponse.fragObs)) {
@@ -208,10 +225,15 @@ export default class DataFetcher {
                 temporalObs[key] = fragResponse.fragObs[key].concat(temporalObs[key]);
             }
         }
+        console.log("[LOG] aggrCurrent: " + aggrCurrent);
+        console.log("[LOG] aggrEnd: " + aggrEnd);
         const mergedObs = this.mergeAggregatesTemporal(temporalObs, responseAggrMethod);
         this.addObservations(mergedObs);
+        console.log(mergedObs);
+        console.log({startDate, endDate, previous: previousDate});
+        this.fragEvent.emit({startDate, endDate, previous: previousDate});
         // this.fragEvent.emit(event);
-        return this.startDate;
+        return {startDate: this.startDate, previous: previousDate};
     }
 
     public mergeAggregatesTemporal(obs: Record<string, Observation[]>,
