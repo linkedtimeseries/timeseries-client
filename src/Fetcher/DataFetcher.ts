@@ -3,7 +3,6 @@ import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
-import {start} from "repl";
 // tslint:disable-next-line:no-var-requires
 const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
@@ -191,7 +190,7 @@ export default class DataFetcher {
         currDate = this.dateCheck(currDate);
         const aggrInterval = this.getAggrInterval(aggrPeriod);
         console.log("[LOG] aggrInterval: " + aggrInterval);
-        if (currDate.getTime() - aggrInterval < fromDate.getTime()) {
+        if (currDate.getTime() < fromDate.getTime()) {
             console.log("[LOG] currDate: " + currDate);
             console.log("[LOG] fromDate: " + fromDate);
             console.log("[LOG] currDate >= fromDate");
@@ -199,6 +198,7 @@ export default class DataFetcher {
             return {startDate: currDate};
         }
         let aggrCurrent = currDate.getTime();
+        const aggrStart = aggrCurrent;
         const aggrEnd = aggrCurrent - aggrInterval;
         const temporalObs: Record<string, Observation[]> = {};
         let responseAggrMethod: string = "";
@@ -218,6 +218,7 @@ export default class DataFetcher {
             endDate = fragResponse.fragmentEnd;
             aggrCurrent -=
                 new Date(fragResponse.fragmentEnd).getTime() - new Date(fragResponse.fragmentStart).getTime();
+            currDate = new Date(aggrCurrent);
             for (const key of Object.keys(fragResponse.fragObs)) {
                 if (! (key in temporalObs)) {
                     temporalObs[key] = [];
@@ -227,7 +228,7 @@ export default class DataFetcher {
         }
         console.log("[LOG] aggrCurrent: " + aggrCurrent);
         console.log("[LOG] aggrEnd: " + aggrEnd);
-        const mergedObs = this.mergeAggregatesTemporal(temporalObs, responseAggrMethod);
+        const mergedObs = this.mergeAggregatesTemporal(temporalObs, responseAggrMethod, aggrStart, aggrInterval);
         this.addObservations(mergedObs);
         console.log(mergedObs);
         console.log({startDate, endDate, previous: previousDate});
@@ -236,18 +237,25 @@ export default class DataFetcher {
         return {startDate: this.startDate, previous: previousDate};
     }
 
-    public mergeAggregatesTemporal(obs: Record<string, Observation[]>,
-                                   aggrMethod: string): Record<string, Observation[]> {
+    public mergeAggregatesTemporal(obs: Record<string, any[]>,
+                                   aggrMethod: string, aggrStart: number, aggrInterval: number):
+        Record<string, Observation[]> {
         if (aggrMethod === "average") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
-                ([key, values]) => mergedAverages[key] = this.mergeAveragesTemporal(values));
+                ([key, values]) => {
+                    const phenomenonStart: string = values[0].phenomenonTime["time:hasBeginning"]["time:inXSDDateTimeStamp"];
+                    const phenomenonEnd: string = values[0].phenomenonTime["time:hasEnd"]["time:inXSDDateTimeStamp"];
+                    if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() <= aggrInterval) {
+                        mergedAverages[key] = values;
+                    }
+                    mergedAverages[key] = [this.mergeAveragesTemporal(values, aggrStart, aggrInterval)]; });
             return mergedAverages;
         }
         return obs;
     }
 
-    public mergeAveragesTemporal(obs: any[]) {
+    public mergeAveragesTemporal(obs: any[], startTime: number, interval: number) {
         const startOb = obs[0];
         let count: number = 0;
         let total: number = 0;
@@ -310,6 +318,9 @@ export default class DataFetcher {
                 params.aggrMethod = aggrMethod;
             }
             if (typeof aggrPeriod !== "undefined") {
+                if (aggrPeriod !== "min" && aggrPeriod !== "hour") {
+                    aggrPeriod = "hour";
+                }
                 params.aggrPeriod = aggrPeriod;
             }
             const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
