@@ -360,9 +360,9 @@ export default class DataFetcher {
                 ([key, values]) => mergedAverages[key] = this.mergeAveragesSpatial(values));
             return mergedAverages;
         } else if (aggrMethod === "median") {
-            // const mergedMedians: Record<string, Observation[]> = {};
-            // Object.entries(obs).forEach(
-            //     ([key, values]) => mergedMedians[key] = this.mergeMedians(values, nrTiles));
+            const mergedMedians: Record<string, Observation[]> = {};
+            Object.entries(obs).forEach(
+                ([key, values]) => mergedMedians[key] = this.mergeMedians(values, nrTiles));
             return obs;
         }
         return obs;
@@ -411,14 +411,23 @@ export default class DataFetcher {
     }
 
     public mergeMedians(obs: any[], nrTiles: number): any[] {
-        let i = 0;
         const mergedObs: any[] = [];
+        let currOb = obs[0];
+        let medianObs: any[] = [];
         // console.log(obs);
-        while (i < obs.length) {
-            const obsSlice = obs.slice(i, i + nrTiles);
-            obs[i].hasSimpleResult = this.getMedian(obsSlice);
-            mergedObs.push(obs[i]);
-            i += nrTiles;
+        obs.forEach((ob) => {
+            if (ob.resultTime !== currOb.resultTime) {
+                currOb.hasSimpleResult = this.getMedian(medianObs);
+                mergedObs.push(currOb);
+                medianObs = [];
+                currOb = ob;
+            }
+            medianObs.push(ob);
+        });
+
+        if (medianObs.length) {
+            currOb.hasSimpleResult = this.getMedian(medianObs);
+            mergedObs.push(currOb);
         }
         // console.log(mergedObs);
         return mergedObs;
