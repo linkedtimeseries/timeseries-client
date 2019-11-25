@@ -240,22 +240,33 @@ export default class DataFetcher {
     public mergeAggregatesTemporal(obs: Record<string, any[]>,
                                    aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
-        if (aggrMethod === "average") {
+        if (typeof aggrMethod !== "undefined") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
                     const phenomenonStart: string = values[0].phenomenonTime["time:hasBeginning"]["time:inXSDDateTimeStamp"];
                     const phenomenonEnd: string = values[0].phenomenonTime["time:hasEnd"]["time:inXSDDateTimeStamp"];
-                    if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() <= aggrInterval) {
+                    console.log("[LOG] phenomenonInterval: "
+                        + (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime()));
+                    console.log("[LOG] aggrInterval: " + aggrInterval);
+                    if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() === aggrInterval) {
                         mergedAverages[key] = values;
+                    } else {
+                        if (aggrMethod === "average") {
+                            console.log("[LOG] merge averages temporal");
+                            mergedAverages[key] = [this.mergeAveragesTemporal(values)];
+                        } else if (aggrMethod === "median") {
+                            console.log("[LOG] merge medians temporal");
+                            mergedAverages[key] = [this.mergeMediansTemporal(values)];
+                        }
                     }
-                    mergedAverages[key] = [this.mergeAveragesTemporal(values, aggrStart, aggrInterval)]; });
+                });
             return mergedAverages;
         }
         return obs;
     }
 
-    public mergeAveragesTemporal(obs: any[], startTime: number, interval: number) {
+    public mergeAveragesTemporal(obs: any[]) {
         const startOb = obs[0];
         let count: number = 0;
         let total: number = 0;
@@ -274,6 +285,12 @@ export default class DataFetcher {
         startOb.Output = {count, total};
         startOb.madeBySensor = Array.from(sensors);
         startOb.hasSimpleResult = total / count;
+        return startOb;
+    }
+
+    public mergeMediansTemporal(obs: any[]) {
+        const startOb = obs[0];
+        startOb.hasSimpleResult = this.getMedian(obs);
         return startOb;
     }
 
@@ -362,7 +379,7 @@ export default class DataFetcher {
         } else if (aggrMethod === "median") {
             const mergedMedians: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
-                ([key, values]) => mergedMedians[key] = this.mergeMedians(values, nrTiles));
+                ([key, values]) => mergedMedians[key] = this.mergeMediansSpatial(values, nrTiles));
             return obs;
         }
         return obs;
@@ -410,7 +427,7 @@ export default class DataFetcher {
         return mergedObs;
     }
 
-    public mergeMedians(obs: any[], nrTiles: number): any[] {
+    public mergeMediansSpatial(obs: any[], nrTiles: number): any[] {
         const mergedObs: any[] = [];
         let currOb = obs[0];
         let medianObs: any[] = [];
