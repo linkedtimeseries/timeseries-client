@@ -7,6 +7,10 @@ import PolygonUtils from "../Polygon/Utils";
 const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
 const UriTemplate = require("uritemplate");
+// tslint:disable-next-line:no-var-requires
+const http = require("http");
+// tslint:disable-next-line:no-var-requires
+const CacheableRequest = require("cacheable-request");
 
 export default class DataFetcher {
 
@@ -475,8 +479,30 @@ export default class DataFetcher {
      */
     public async getDataFragment(url: string): Promise<any> {
         console.log(url);
-        return fetch(url)
-                .then((response) => response.json());
+        return new Promise((resolve, reject) => {
+            const cacheableRequest = new CacheableRequest(http.request);
+            let body: any = [];
+            const cacheReq = cacheableRequest(url, (req: any) => {
+                req.on("data", (chunk: any) => {
+                    body.push(chunk);
+                }).on("end", () => {
+                    body = Buffer.concat(body).toString();
+                    resolve(JSON.parse(body));
+                    // at this point, `body` has the entire request body stored in it as a string
+                });
+            });
+            cacheReq.on("request", (req: any) => {
+                console.log("hallo");
+                console.log(req);
+                req.end();
+            });
+
+            cacheReq.on("error", (err: any) => reject(err));
+        });
+    }
+
+    public cb(res: any) {
+        console.log(res);
     }
 
     /**
