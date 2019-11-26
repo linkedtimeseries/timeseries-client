@@ -482,10 +482,12 @@ export default class DataFetcher {
         return new Promise((resolve, reject) => {
             const cacheableRequest = new CacheableRequest(http.request);
             let body: any = [];
-            const cacheReq = cacheableRequest(url, (req: any) => {
-                req.on("data", (chunk: any) => {
+            const cacheReq = cacheableRequest(url);
+            cacheReq.on("response", (res: any) => {
+                res.on("data", (chunk: any) => {
                     body.push(chunk);
-                }).on("end", () => {
+                });
+                res.on("end", () => {
                     body = Buffer.concat(body).toString();
                     resolve(JSON.parse(body));
                     // at this point, `body` has the entire request body stored in it as a string
