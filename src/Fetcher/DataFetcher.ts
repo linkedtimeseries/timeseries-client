@@ -11,34 +11,10 @@ const UriTemplate = require("uritemplate");
 const http = require("http");
 // tslint:disable-next-line:no-var-requires
 const CacheableRequest = require("cacheable-request");
+// tslint:disable-next-line:no-var-requires
+const urlParser = require("url");
 
 export default class DataFetcher {
-
-    public static parseURL(url: string) {
-        const parser = document.createElement("a");
-        const searchObject: any = {};
-        let queries;
-        let split;
-
-        // Let the browser do the work
-        parser.href = url;
-        // Convert query string to object
-        queries = parser.search.replace(/^\?/, "").split("&");
-        queries.forEach((element) => {
-            split = element.split("=");
-            searchObject[split[0]] = split[1];
-        });
-        return {
-            protocol: parser.protocol,
-            host: parser.host,
-            hostname: parser.hostname,
-            port: parser.port,
-            pathname: parser.pathname,
-            search: parser.search,
-            searchObject,
-            hash: parser.hash,
-        };
-    }
 
     private baseUrl =  process.env.BASEURL;
     private observations: Record<string, Observation[]> = {};
@@ -130,7 +106,9 @@ export default class DataFetcher {
                 console.log("[LOG] response after temporal: " + response);
                 if (new Date(this.startDate) > new Date(fromDate)) {
                     console.log("next");
-                    const prevDate = DataFetcher.parseURL(response.previous).searchObject.page;
+                    const prevDate = urlParser.parse(response.previous, true).query.page;
+                    console.log(urlParser.parse(response.previous).query);
+                    console.log(urlParser.parse(response.previous).query.page);
                     this.getObservationsRecursive(tiles,
                         fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
                 }
@@ -363,7 +341,7 @@ export default class DataFetcher {
         }
         let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
-        const responseAggrMethod = DataFetcher.parseURL(response["@id"]).searchObject.aggrMethod;
+        const responseAggrMethod = urlParser.parse(response["@id"], true).query.aggrMethod;
         // console.log(allFragObs);
         allFragObs = this.mergeAggregatesSpatial(allFragObs, responseAggrMethod, tiles.length);
         console.log(allFragObs);
@@ -494,17 +472,12 @@ export default class DataFetcher {
                 });
             });
             cacheReq.on("request", (req: any) => {
-                console.log("hallo");
-                console.log(req);
+                // console.log(req);
                 req.end();
             });
 
             cacheReq.on("error", (err: any) => reject(err));
         });
-    }
-
-    public cb(res: any) {
-        console.log(res);
     }
 
     /**
