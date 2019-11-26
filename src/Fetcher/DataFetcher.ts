@@ -173,9 +173,7 @@ export default class DataFetcher {
         }
         return date;
     }
-    // TODO: edge case waarbij aggrInterval niet overeenkomt met requeste interval
-    // vb : |------------| request interval
-    //     |---|---|---|---| aggrIntervallen
+
     public async getTilesDataFragmentsTemporal(
         tiles: Tile[],
         fromDate: (Date | string),
@@ -240,7 +238,7 @@ export default class DataFetcher {
     public mergeAggregatesTemporal(obs: Record<string, any[]>,
                                    aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
-        if (typeof aggrMethod !== "undefined") {
+        if (aggrMethod !== "undefined") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
