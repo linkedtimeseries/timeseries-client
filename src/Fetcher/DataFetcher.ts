@@ -8,7 +8,7 @@ const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
 const UriTemplate = require("uritemplate");
 // tslint:disable-next-line:no-var-requires
-const http = require("http");
+const http = require("follow-redirects").http;
 // tslint:disable-next-line:no-var-requires
 const CacheableRequest = require("cacheable-request");
 // tslint:disable-next-line:no-var-requires
@@ -321,6 +321,7 @@ export default class DataFetcher {
                 params.aggrPeriod = aggrPeriod;
             }
             const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
+            console.log(url);
             response = await this.getDataFragment(url);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
@@ -467,6 +468,7 @@ export default class DataFetcher {
                 });
                 res.on("end", () => {
                     body = Buffer.concat(body).toString();
+                    console.log(JSON.parse(body));
                     resolve(JSON.parse(body));
                     // at this point, `body` has the entire request body stored in it as a string
                 });
