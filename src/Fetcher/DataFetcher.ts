@@ -45,8 +45,8 @@ export default class DataFetcher {
         console.log(tiles);
         fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
         toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
-        console.log("[LOG] fromDate after offset correction: " + fromDate);
-        console.log("[LOG] toDate after offset correction: " + toDate);
+        // console.log("[LOG] fromDate after offset correction: " + fromDate);
+        // console.log("[LOG] toDate after offset correction: " + toDate);
         this.observations = {};
         this.endDate = new Date(toDate);
 
@@ -103,12 +103,12 @@ export default class DataFetcher {
         aggrPeriod?: string) {
         this.getTilesDataFragmentsTemporal(tiles, fromDate, currDate, toDate, polygonUtils, aggrMethod, aggrPeriod)
             .then((response) => {
-                console.log("[LOG] response after temporal: " + response);
+                // console.log("[LOG] response after temporal: " + response);
                 if (new Date(this.startDate) > new Date(fromDate)) {
-                    console.log("next");
+                    // console.log("next");
                     const prevDate = urlParser.parse(response.previous, true).query.page;
-                    console.log(urlParser.parse(response.previous).query);
-                    console.log(urlParser.parse(response.previous).query.page);
+                    // console.log(urlParser.parse(response.previous).query);
+                    // console.log(urlParser.parse(response.previous).query.page);
                     this.getObservationsRecursive(tiles,
                         fromDate, prevDate, toDate, polygonUtils, aggrMethod, aggrPeriod);
                 }
@@ -169,11 +169,11 @@ export default class DataFetcher {
         toDate = this.dateCheck(toDate);
         currDate = this.dateCheck(currDate);
         const aggrInterval = this.getAggrInterval(aggrPeriod);
-        console.log("[LOG] aggrInterval: " + aggrInterval);
+        // console.log("[LOG] aggrInterval: " + aggrInterval);
         if (currDate.getTime() < fromDate.getTime()) {
-            console.log("[LOG] currDate: " + currDate);
-            console.log("[LOG] fromDate: " + fromDate);
-            console.log("[LOG] currDate >= fromDate");
+            // console.log("[LOG] currDate: " + currDate);
+            // console.log("[LOG] fromDate: " + fromDate);
+            // console.log("[LOG] currDate >= fromDate");
             this.startDate = currDate;
             return {startDate: currDate};
         }
@@ -204,12 +204,12 @@ export default class DataFetcher {
                 temporalObs[key] = fragResponse.fragObs[key].concat(temporalObs[key]);
             }
         }
-        console.log("[LOG] aggrCurrent: " + aggrCurrent);
-        console.log("[LOG] aggrEnd: " + aggrEnd);
+        // console.log("[LOG] aggrCurrent: " + aggrCurrent);
+        // console.log("[LOG] aggrEnd: " + aggrEnd);
         const mergedObs = this.mergeAggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(mergedObs);
-        console.log(mergedObs);
-        console.log({startDate, endDate, previous: previousDate});
+        // console.log(mergedObs);
+        // console.log({startDate, endDate, previous: previousDate});
         this.fragEvent.emit({startDate, endDate, previous: previousDate});
         // this.fragEvent.emit(event);
         return {startDate: this.startDate, previous: previousDate};
@@ -218,24 +218,24 @@ export default class DataFetcher {
     public mergeAggregatesTemporal(obs: Record<string, any[]>,
                                    aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
-        console.log(aggrMethod);
+        // console.log(aggrMethod);
         if (typeof aggrMethod !== "undefined") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
                     const phenomenonStart: string = values[0].phenomenonTime["time:hasBeginning"]["time:inXSDDateTimeStamp"];
                     const phenomenonEnd: string = values[0].phenomenonTime["time:hasEnd"]["time:inXSDDateTimeStamp"];
-                    console.log("[LOG] phenomenonInterval: "
-                        + (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime()));
-                    console.log("[LOG] aggrInterval: " + aggrInterval);
+                    // console.log("[LOG] phenomenonInterval: "
+                    //    + (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime()));
+                    // console.log("[LOG] aggrInterval: " + aggrInterval);
                     if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() === aggrInterval) {
                         mergedAverages[key] = values;
                     } else {
                         if (aggrMethod === "average") {
-                            console.log("[LOG] merge averages temporal");
+                            // console.log("[LOG] merge averages temporal");
                             mergedAverages[key] = [this.mergeAveragesTemporal(values)];
                         } else if (aggrMethod === "median") {
-                            console.log("[LOG] merge medians temporal");
+                            // console.log("[LOG] merge medians temporal");
                             mergedAverages[key] = [this.mergeMediansTemporal(values)];
                         }
                     }
@@ -320,7 +320,7 @@ export default class DataFetcher {
                 params.aggrPeriod = aggrPeriod;
             }
             const url = this.urlTemplate.expand(params).replace(/%3A/g, ":");
-            console.log(url);
+            // console.log(url);
             response = await this.getDataFragment(url);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
@@ -342,7 +342,7 @@ export default class DataFetcher {
         let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
         allFragObs = this.mergeAggregatesSpatial(allFragObs, aggrMethod, tiles.length);
-        console.log(allFragObs);
+        // console.log(allFragObs);
         return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious, aggrMethod};
     }
 
@@ -465,7 +465,7 @@ export default class DataFetcher {
                 });
                 res.on("end", () => {
                     body = Buffer.concat(body).toString();
-                    console.log(JSON.parse(body));
+                    // console.log(JSON.parse(body));
                     resolve(JSON.parse(body));
                     // at this point, `body` has the entire request body stored in it as a string
                 });
@@ -594,7 +594,6 @@ export default class DataFetcher {
             if (resultDate <= toDate && resultDate >= fromDate
                 && (("lat" in ob && polygonUtils.polygonContainsPoint({lat: ob.lat, lon: ob.long}))
                     || ! ("lat" in ob))) {
-                console.log("erin");
                 if (!(ob.observedProperty in fragmentObservations)) {
                     fragmentObservations[ob.observedProperty] = [];
                 }
