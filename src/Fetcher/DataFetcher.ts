@@ -181,7 +181,6 @@ export default class DataFetcher {
         const aggrStart = aggrCurrent;
         const aggrEnd = aggrCurrent - aggrInterval;
         const temporalObs: Record<string, Observation[]> = {};
-        let responseAggrMethod: string = "";
         let startDate: string = "";
         let previousDate: string = "";
         let endDate: string = "";
@@ -192,7 +191,6 @@ export default class DataFetcher {
 
             // const event: object =  {startDate: fragmentStart, endDate: fragmentEnd, previous: fragmentPrevious};
             this.startDate = new Date(fragResponse.fragmentStart);
-            responseAggrMethod = fragResponse.responseAggrMethod;
             startDate = fragResponse.fragmentStart;
             previousDate = fragResponse.fragmentPrevious;
             endDate = fragResponse.fragmentEnd;
@@ -208,7 +206,7 @@ export default class DataFetcher {
         }
         console.log("[LOG] aggrCurrent: " + aggrCurrent);
         console.log("[LOG] aggrEnd: " + aggrEnd);
-        const mergedObs = this.mergeAggregatesTemporal(temporalObs, responseAggrMethod, aggrStart, aggrInterval);
+        const mergedObs = this.mergeAggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(mergedObs);
         console.log(mergedObs);
         console.log({startDate, endDate, previous: previousDate});
@@ -220,7 +218,8 @@ export default class DataFetcher {
     public mergeAggregatesTemporal(obs: Record<string, any[]>,
                                    aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
-        if (aggrMethod !== "undefined") {
+        console.log(aggrMethod);
+        if (typeof aggrMethod !== "undefined") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
@@ -293,7 +292,7 @@ export default class DataFetcher {
         polygonUtils: PolygonUtils,
         aggrMethod?: string,
         aggrPeriod?: string): Promise<{fragObs: Record<string, Observation[]>,
-        fragmentStart: string, fragmentEnd: string, fragmentPrevious: string, responseAggrMethod: string}> {
+        fragmentStart: string, fragmentEnd: string, fragmentPrevious: string, aggrMethod: string}> {
         if (toDate instanceof Date) {
             toDate = toDate.toISOString();
         }
@@ -342,11 +341,9 @@ export default class DataFetcher {
         }
         let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
-        const responseAggrMethod = urlParser.parse(response["@id"], true).query.aggrMethod;
-        // console.log(allFragObs);
-        allFragObs = this.mergeAggregatesSpatial(allFragObs, responseAggrMethod, tiles.length);
+        allFragObs = this.mergeAggregatesSpatial(allFragObs, aggrMethod, tiles.length);
         console.log(allFragObs);
-        return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious, responseAggrMethod};
+        return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious, aggrMethod};
     }
 
     public mergeAggregatesSpatial(obs: Record<string, Observation[]>,
