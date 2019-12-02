@@ -23,6 +23,7 @@ export default class DataFetcher {
     private currentDate: Date = new Date();
     private startDate: Date = new Date();
     private endDate: Date = new Date();
+    private fragmentLength: number = 3600000;
 
     /**
      * Recursively requests all necessary fragments to fulfill the request
@@ -44,8 +45,8 @@ export default class DataFetcher {
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
         console.log("request sent");
         console.log(tiles);
-        fromDate = this.dateOffsetCorrection(fromDate, true, aggrPeriod);
-        toDate = this.dateOffsetCorrection(toDate, false, aggrPeriod);
+        fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
+        toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
         console.log("[LOG] fromDate after offset correction: " + fromDate);
         console.log("[LOG] toDate after offset correction: " + toDate);
         this.observations = {};
@@ -56,7 +57,7 @@ export default class DataFetcher {
         this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
     }
 
-    public dateOffsetCorrection(datestr: string, isStartDate: boolean, aggrPeriod?: string) {
+    public dateOffsetCorrection(datestr: string, aggrPeriod?: string) {
         let date: Date = new Date(datestr);
         if (typeof aggrPeriod === "undefined") {
             return datestr;
@@ -76,7 +77,7 @@ export default class DataFetcher {
                 }
                 break;
             case "day":
-                if (date.getUTCHours() ||
+                if (date.getUTCHours() !== 0 ||
                    date.getUTCMinutes() !== 0 || date.getUTCSeconds() !== 0 || date.getUTCMilliseconds() !== 0) {
                     interval = Config.context.day;
                     date.setUTCHours(0, 0, 0, 0);
@@ -158,7 +159,12 @@ export default class DataFetcher {
         // console.log("[LOG] aggrInterval: " + aggrInterval);
         let aggrCurrent = this.currentDate.getTime();
         const aggrStart = aggrCurrent;
-        const aggrEnd = aggrCurrent - aggrInterval;
+        const aggrEnd = aggrStart - aggrInterval;
+        if (this.currentDate.getUTCHours() === 0 ||
+            this.currentDate.getUTCMinutes() === 0 ||
+            this.currentDate.getUTCSeconds() === 0 || this.currentDate.getUTCMilliseconds() === 0) {
+            this.currentDate = new Date(this.currentDate.getTime() - Config.context.hour);
+        }
         const temporalObs: Record<string, Observation[]> = {};
         let startUrl: string = "";
         let previousUrl: string = "";
@@ -190,6 +196,7 @@ export default class DataFetcher {
         }
         // console.log("[LOG] aggrCurrent: " + aggrCurrent);
         // console.log("[LOG] aggrEnd: " + aggrEnd);
+        console.log(temporalObs);
         const mergedObs = this.mergeAggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(mergedObs);
         // console.log(mergedObs);
@@ -216,6 +223,7 @@ export default class DataFetcher {
                     //    + (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime()));
                     // console.log("[LOG] aggrInterval: " + aggrInterval);
                     if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() === aggrInterval) {
+                        console.log("no further merging");
                         mergedSummaries[key] = values;
                     } else {
                         if (aggrMethod === "average") {
@@ -227,6 +235,7 @@ export default class DataFetcher {
                         }
                     }
                 });
+            console.log(mergedSummaries);
             return mergedSummaries;
         }
         return obs;
@@ -263,9 +272,6 @@ export default class DataFetcher {
     /**
      * Fetch all fragments of a list of tiles for a certain date and merges them.
      * @param tiles: tiles for which data has to be requested.
-     * @param fromDate: the start date of the request
-     * @param currDate: the current date for which all fragments need to be requested.
-     * @param toDate: the end date of the request.
      * @param polygonUtils
      * @param aggrMethod
      * @param aggrPeriod
@@ -336,7 +342,7 @@ export default class DataFetcher {
             const mergedMedians: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => mergedMedians[key] = this.mergeMediansSpatial(values));
-            return obs;
+            return mergedMedians;
         }
         return obs;
     }
@@ -402,7 +408,7 @@ export default class DataFetcher {
             currOb.hasSimpleResult = this.getMedian(medianObs);
             mergedObs.push(currOb);
         }
-        // console.log(mergedObs);
+        console.log(mergedObs);
         return mergedObs;
     }
 
