@@ -11,6 +11,7 @@ const UriTemplate = require("uritemplate");
 const http = require("follow-redirects").http;
 // tslint:disable-next-line:no-var-requires
 const CacheableRequest = require("cacheable-request");
+const cacheableRequest = new CacheableRequest(http.request);
 // tslint:disable-next-line:no-var-requires
 const urlParser = require("url");
 
@@ -484,7 +485,6 @@ export default class DataFetcher {
     public async getDataFragment(url: string): Promise<any> {
         console.log(url);
         return new Promise((resolve, reject) => {
-            const cacheableRequest = new CacheableRequest(http.request);
             let body: any = [];
             const cacheReq = cacheableRequest(url);
             cacheReq.on("response", (res: any) => {
