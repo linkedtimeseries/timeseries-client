@@ -42,9 +42,10 @@ export default class DataFetcher {
         aggrMethod?: string,
         aggrPeriod?: string) {
         const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
+        // console.log(geometry);
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
         console.log("request sent");
-        console.log(tiles);
+        // console.log(tiles);
         fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
         toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
         console.log("[LOG] fromDate after offset correction: " + fromDate);
@@ -112,8 +113,8 @@ export default class DataFetcher {
         this.getTilesDataFragmentsTemporal(tiles, polygonUtils, aggrMethod, aggrPeriod)
             .then((response) => {
                 // console.log("[LOG] response after temporal: " + response);
-                console.log("current date: " + this.currentDate);
-                console.log("fromDate: " + this.startDate);
+                // console.log("current date: " + this.currentDate);
+                // console.log("fromDate: " + this.startDate);
                 if (this.currentDate < this.endDate) {
                     // this.currentDate = new Date(response.next);
                     // console.log("next");
@@ -205,7 +206,7 @@ export default class DataFetcher {
         const aggregateObs = this.aggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(aggregateObs);
         const startDateString: string = new Date(aggrStart).toISOString();
-        console.log({startDateString, endDateString});
+        // console.log({startDateString, endDateString});
 
         this.fragEvent.emit({startDateString, endDateString});
         return {start: startDateString, next: nextDate};

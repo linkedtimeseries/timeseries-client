@@ -202,11 +202,11 @@ export default class PolygonUtils {
             for (let currY = this.tBoundingBox.maxTile.yTile; currY <= this.tBoundingBox.minTile.yTile; currY++) {
                 const bb = globalMercator.googleToBBox([currX, currY, Config.context.zoom]);
                 const bboxPoly: Feature<Polygon> = bboxPolygon([bb[1], bb[0], bb[3], bb[2]]);
-                console.log("run");
-                console.log(this.polygon);
-                console.log(bboxPoly);
-                console.log(intersect(this.polygon, bboxPoly));
-                console.log(booleanDisjoint(this.polygon, bboxPoly));
+                // console.log("run");
+                // console.log(this.polygon);
+                // console.log(bboxPoly);
+                // console.log(intersect(this.polygon, bboxPoly));
+                // console.log(booleanDisjoint(this.polygon, bboxPoly));
                 if (! booleanDisjoint(this.polygon, bboxPoly)) {
                     console.log("succes");
                     tilePolys[currY - offsetYtile][currX - offsetXtile] = new Tile(currX, currY, Config.context.zoom);
