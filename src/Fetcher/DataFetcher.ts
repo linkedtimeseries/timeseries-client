@@ -52,7 +52,6 @@ export default class DataFetcher {
         this.startDate = new Date(fromDate);
         this.endDate = new Date(toDate);
         this.currentDate = new Date(toDate);
-
         this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
     }
 
@@ -179,10 +178,11 @@ export default class DataFetcher {
         let aggrCurrent = this.currentDate.getTime();
         const aggrStart = aggrCurrent;
         const aggrEnd = aggrStart - aggrInterval;
-        if (this.currentDate.getUTCHours() === 0 ||
-            this.currentDate.getUTCMinutes() === 0 ||
-            this.currentDate.getUTCSeconds() === 0 || this.currentDate.getUTCMilliseconds() === 0) {
+        if (this.currentDate.getUTCMinutes() === 0 &&
+            this.currentDate.getUTCSeconds() === 0 && this.currentDate.getUTCMilliseconds() === 0) {
             this.currentDate = new Date(this.currentDate.getTime() - Config.context.hour);
+        } else {
+            this.currentDate.setUTCMinutes(0, 0, 0);
         }
         const temporalObs: Record<string, Observation[]> = {};
         let startUrl: string = "";
