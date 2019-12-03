@@ -52,7 +52,7 @@ export default class DataFetcher {
         this.observations = {};
         this.startDate = new Date(fromDate);
         this.endDate = new Date(toDate);
-        this.currentDate = new Date(toDate);
+        this.currentDate = new Date(fromDate);
         this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
     }
 
@@ -89,7 +89,7 @@ export default class DataFetcher {
                 break;
         }
         date = new Date(date.getTime() + interval);
-        console.log(date.toISOString());
+        // console.log(date.toISOString());
         return date.toISOString();
     }
 
@@ -114,7 +114,8 @@ export default class DataFetcher {
                 // console.log("[LOG] response after temporal: " + response);
                 console.log("current date: " + this.currentDate);
                 console.log("fromDate: " + this.startDate);
-                if (this.currentDate > this.startDate) {
+                if (this.currentDate < this.endDate) {
+                    // this.currentDate = new Date(response.next);
                     // console.log("next");
                     // console.log(urlParser.parse(response.previous).query);
                     // console.log(urlParser.parse(response.previous).query.page);
@@ -131,7 +132,7 @@ export default class DataFetcher {
     public getAggrInterval(aggrPeriod?: string) {
         // if undefined, then there is no aggregation period and we only need to run getTilesDataFragmentsTemporal once
         if (typeof aggrPeriod === "undefined") {
-            return 0;
+            return 1;
         }
         switch (aggrPeriod) {
             case "min":
@@ -145,7 +146,7 @@ export default class DataFetcher {
             case "year":
                 return Config.context.year;
             default:
-                return 0;
+                return 1;
         }
     }
 
@@ -176,58 +177,38 @@ export default class DataFetcher {
 
         const aggrInterval = this.getAggrInterval(aggrPeriod);
         // console.log("[LOG] aggrInterval: " + aggrInterval);
+        // console.log(this.currentDate);
         let aggrCurrent = this.currentDate.getTime();
         const aggrStart = aggrCurrent;
-        const aggrEnd = aggrStart - aggrInterval;
-        if (this.currentDate.getUTCMinutes() === 0 &&
-            this.currentDate.getUTCSeconds() === 0 && this.currentDate.getUTCMilliseconds() === 0) {
-            this.currentDate = new Date(this.currentDate.getTime() - Config.context.hour);
-        } else {
-            this.currentDate.setUTCMinutes(0, 0, 0);
-        }
+        const aggrEnd = aggrStart + aggrInterval;
+
         const temporalObs: Record<string, Observation[]> = {};
-        let startUrl: string = "";
-        let previousUrl: string = "";
-        let endUrl: string = "";
-        while (aggrCurrent >= aggrEnd) {
-            console.log("aggrCurrent: " + new Date(aggrCurrent).toISOString());
-            console.log("aggrEnd: " + new Date(aggrEnd).toISOString());
+        let nextDate: string = "";
+        let endDateString: string = "";
+        while (aggrCurrent < aggrEnd) {
             const fragResponse = await
                 this.getTilesDataFragmentsSpatial(tiles, polygonUtils, aggrMethod, aggrPeriod);
 
-            // const event: object =  {startUrl: fragmentStart, endUrl: fragmentEnd, previous: fragmentPrevious};
-            // this.currentDate = new Date(fragResponse.fragmentStart);
-            startUrl = fragResponse.fragmentStart;
-            previousUrl = fragResponse.fragmentPrevious;
-            endUrl = fragResponse.fragmentEnd;
-            const previousDate = urlParser.parse(previousUrl, true).query.page;
-            console.log("previousUrl: " + previousDate);
-            aggrCurrent = new Date(previousDate).getTime();
-            if (aggrCurrent >= aggrEnd) {
-                this.currentDate = new Date(previousDate);
-            }
-            // console.log("current date: " + this.currentDate);
+            endDateString = fragResponse.fragmentEnd;
+            nextDate = urlParser.parse(fragResponse.fragmentNext, true).query.page;
+            aggrCurrent = new Date(nextDate).getTime();
+            this.currentDate = new Date(nextDate);
+
             for (const key of Object.keys(fragResponse.fragObs)) {
                 if (! (key in temporalObs)) {
                     temporalObs[key] = [];
                 }
-                temporalObs[key] = fragResponse.fragObs[key].concat(temporalObs[key]);
+                temporalObs[key] = temporalObs[key].concat(fragResponse.fragObs[key]);
             }
+            // console.log(temporalObs);
         }
-        // console.log("[LOG] aggrCurrent: " + aggrCurrent);
-        // console.log("[LOG] aggrEnd: " + aggrEnd);
-        // console.log(temporalObs);
         const aggregateObs = this.aggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(aggregateObs);
-        // console.log(mergedObs);
-        // console.log({startUrl, endUrl, previous: previousUrl});
-        const startDateString: string = new Date(aggrEnd).toISOString();
-        // console.log(endUrl);
-        const endDateString: string = urlParser.parse(endUrl, true).query.page;
-        // const previousDateString: string = urlParser.parse(previousUrl, true).query.page;
+        const startDateString: string = new Date(aggrStart).toISOString();
+        console.log({startDateString, endDateString});
+
         this.fragEvent.emit({startDateString, endDateString});
-        // this.fragEvent.emit(event);
-        return {start: startUrl, previous: previousUrl};
+        return {start: startDateString, next: nextDate};
     }
 
     /**
@@ -241,30 +222,22 @@ export default class DataFetcher {
     public aggregatesTemporal(obs: Record<string, any[]>,
                               aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
-        // console.log(aggrMethod);
         if (typeof aggrMethod !== "undefined") {
             const mergedSummaries: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
                     const phenomenonStart: string = values[0].phenomenonTime["time:hasBeginning"]["time:inXSDDateTimeStamp"];
                     const phenomenonEnd: string = values[0].phenomenonTime["time:hasEnd"]["time:inXSDDateTimeStamp"];
-                    // console.log("[LOG] phenomenonInterval: "
-                    //    + (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime()));
-                    // console.log("[LOG] aggrInterval: " + aggrInterval);
                     if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() === aggrInterval) {
-                        console.log("no further merging");
                         mergedSummaries[key] = values;
                     } else {
                         if (aggrMethod === "average") {
-                            // console.log("[LOG] merge averages temporal");
                             mergedSummaries[key] = [this.averagesTemporal(values)];
                         } else if (aggrMethod === "median") {
-                            // console.log("[LOG] merge medians temporal");
                             mergedSummaries[key] = [this.mediansTemporal(values)];
                         }
                     }
                 });
-            console.log(mergedSummaries);
             return mergedSummaries;
         }
         return obs;
@@ -319,9 +292,9 @@ export default class DataFetcher {
         polygonUtils: PolygonUtils,
         aggrMethod?: string,
         aggrPeriod?: string): Promise<{fragObs: Record<string, Observation[]>,
-        fragmentStart: string, fragmentEnd: string, fragmentPrevious: string}> {
+        fragmentStart: string, fragmentEnd: string, fragmentNext: string}> {
         let fragmentStart: string = "";
-        let fragmentPrevious: string = "";
+        let fragmentNext: string = "";
         let fragmentEnd: string = "";
         const unsortedObs: Record<string, Observation[][]> = {};
         let response: any = {};
@@ -345,7 +318,7 @@ export default class DataFetcher {
             response = await this.getDataFragment(url);
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
-            fragmentPrevious = response.previous;
+            fragmentNext = response.next;
             const template = response["dcterms:isPartOf"]["hydra:search"]["hydra:template"];
             this.urlTemplate = UriTemplate.parse(template);
             if (response["@graph"].length <= 1) {
@@ -364,7 +337,7 @@ export default class DataFetcher {
         // console.log(allFragObs);
         allFragObs = this.aggregatesSpatial(allFragObs, aggrMethod);
         // console.log(allFragObs);
-        return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious};
+        return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentNext};
     }
 
     /**
@@ -396,7 +369,6 @@ export default class DataFetcher {
         let total = 0;
         let count = 0;
         let sensors: Set<any> = new Set([]);
-        // console.log(obs);
         const mergedObs: any[] = [];
         for (const ob of obs) {
             if (currOb.resultTime !== ob.resultTime) {
@@ -429,7 +401,6 @@ export default class DataFetcher {
             ob.hasSimpleResult = total / count;
             mergedObs.push(ob);
         }
-        // console.log(mergedObs);
         return mergedObs;
     }
 
@@ -441,7 +412,6 @@ export default class DataFetcher {
         const mergedObs: any[] = [];
         let currOb = obs[0];
         let medianObs: any[] = [];
-        console.log(obs);
         obs.forEach((ob) => {
             if (ob.resultTime !== currOb.resultTime) {
                 currOb.hasSimpleResult = this.getMedian(medianObs);
@@ -456,7 +426,6 @@ export default class DataFetcher {
             currOb.hasSimpleResult = this.getMedian(medianObs);
             mergedObs.push(currOb);
         }
-        console.log(mergedObs);
         return mergedObs;
     }
 
@@ -517,7 +486,7 @@ export default class DataFetcher {
             if (!(key in this.observations)) {
                 this.observations[key] = obs[key];
             } else {
-                this.observations[key] = obs[key].concat(this.observations[key]);
+                this.observations[key] = this.observations[key].concat(obs[key]);
             }
         }
     }
@@ -601,8 +570,6 @@ export default class DataFetcher {
     /**
      * Filter observations according to fromDate and toDate.
      * @param obs: the list of observations to be filtered.
-     * @param fromDate: start of the filter interval
-     * @param toDate: end of the filter interval
      * @param polygonUtils
      * @returns filtered list of observations
      */
@@ -611,7 +578,7 @@ export default class DataFetcher {
         const fragmentObservations: Record<string, Observation[]> = {};
         obs.forEach( (ob) => {
             const resultDate = new Date(ob.resultTime);
-            if (resultDate <= this.endDate && resultDate >= this.startDate
+            if (resultDate < this.endDate && resultDate >= this.startDate
                 && (("lat" in ob && polygonUtils.polygonContainsPoint({lat: ob.lat, lon: ob.long}))
                     || ! ("lat" in ob))) {
                 if (!(ob.observedProperty in fragmentObservations)) {
@@ -719,7 +686,7 @@ export default class DataFetcher {
     private calculateMedians(obs: any[], aggrInterval: number, metric: string) {
         const medianObservations = [];
         // startDate + 5 minutes
-        let nextMedian: number = this.currentDate.getTime();
+        let nextMedian: number = this.startDate.getTime();
         nextMedian += aggrInterval;
         const tempSensors = new Set<string>();
         const usedProcedure = "median";
@@ -766,7 +733,6 @@ export default class DataFetcher {
      */
     private calculateAverages(obs: any[], aggrInterval: number, metric: string) {
         const avgObservations = [];
-        console.log(obs);
         let nextAvg: number = this.startDate.getTime();
         nextAvg += aggrInterval;
         // total of observation values between a time interval
@@ -783,7 +749,7 @@ export default class DataFetcher {
             } else {
                 // only add an average if there are values in the time interval
                 if (count > 0) {
-                    console.log("joep");
+                    // console.log("joep");
                     const nextObs: any = this.buildAggregateObservation(
                         nextAvg - aggrInterval,
                         tempTotal / count,
