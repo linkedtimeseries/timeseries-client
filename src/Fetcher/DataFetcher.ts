@@ -215,13 +215,14 @@ export default class DataFetcher {
         }
         // console.log("[LOG] aggrCurrent: " + aggrCurrent);
         // console.log("[LOG] aggrEnd: " + aggrEnd);
-        console.log(temporalObs);
+        // console.log(temporalObs);
         const aggregateObs = this.aggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
         this.addObservations(aggregateObs);
         // console.log(mergedObs);
         // console.log({startUrl, endUrl, previous: previousUrl});
         const startDateString: string = new Date(aggrEnd).toISOString();
-        const endDateString: string = new Date(aggrStart).toISOString();
+        // console.log(endUrl);
+        const endDateString: string = urlParser.parse(endUrl, true).query.page;
         // const previousDateString: string = urlParser.parse(previousUrl, true).query.page;
         this.fragEvent.emit({startDateString, endDateString});
         // this.fragEvent.emit(event);
