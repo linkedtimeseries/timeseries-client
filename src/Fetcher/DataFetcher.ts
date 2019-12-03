@@ -23,7 +23,6 @@ export default class DataFetcher {
     private currentDate: Date = new Date();
     private startDate: Date = new Date();
     private endDate: Date = new Date();
-    private fragmentLength: number = 3600000;
 
     /**
      * Recursively requests all necessary fragments to fulfill the request
@@ -57,6 +56,11 @@ export default class DataFetcher {
         this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
     }
 
+    /**
+     * Aligns a date with a given aggregation period
+     * @param datestr: the string of the date
+     * @param aggrPeriod: the aggregation period
+     */
     public dateOffsetCorrection(datestr: string, aggrPeriod?: string) {
         let date: Date = new Date(datestr);
         if (typeof aggrPeriod === "undefined") {
@@ -120,6 +124,10 @@ export default class DataFetcher {
         });
     }
 
+    /**
+     * returns an interval in milliseconds
+     * @param aggrPeriod: the string of the interval to be returned
+     */
     public getAggrInterval(aggrPeriod?: string) {
         // if undefined, then there is no aggregation period and we only need to run getTilesDataFragmentsTemporal once
         if (typeof aggrPeriod === "undefined") {
@@ -141,6 +149,10 @@ export default class DataFetcher {
         }
     }
 
+    /**
+     * Type check for a date. If the date is a string, it gets converted
+     * @param date
+     */
     public dateCheck(date: (Date | string)) {
         if (typeof date === "string") {
             date = new Date(date);
@@ -148,6 +160,13 @@ export default class DataFetcher {
         return date;
     }
 
+    /**
+     * Requests data over all given tiles, over the given aggregation period (this is 0 when raw data is requested)
+     * @param tiles: the tiles over which data is queried
+     * @param polygonUtils: methods to help filter the queried data
+     * @param aggrMethod: method to aggregate data (none if raw data is requested)
+     * @param aggrPeriod: period over which data needs to be aggregated
+     */
     public async getTilesDataFragmentsTemporal(
         tiles: Tile[],
         polygonUtils: PolygonUtils,
@@ -197,8 +216,8 @@ export default class DataFetcher {
         // console.log("[LOG] aggrCurrent: " + aggrCurrent);
         // console.log("[LOG] aggrEnd: " + aggrEnd);
         console.log(temporalObs);
-        const mergedObs = this.mergeAggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
-        this.addObservations(mergedObs);
+        const aggregateObs = this.aggregatesTemporal(temporalObs, aggrMethod, aggrStart, aggrInterval);
+        this.addObservations(aggregateObs);
         // console.log(mergedObs);
         // console.log({startUrl, endUrl, previous: previousUrl});
         const startDateString: string = new Date(aggrEnd).toISOString();
@@ -209,8 +228,16 @@ export default class DataFetcher {
         return {start: startUrl, previous: previousUrl};
     }
 
-    public mergeAggregatesTemporal(obs: Record<string, any[]>,
-                                   aggrMethod: string, aggrStart: number, aggrInterval: number):
+    /**
+     * If the aggregation period is longer than the time span of the fragments, additional merging in the temporal
+     * dimension is required to get the correct result
+     * @param obs: the observations to be merged
+     * @param aggrMethod: the aggregation method
+     * @param aggrStart: the time at which aggregation starts
+     * @param aggrInterval: the interval over which needs to be aggregated
+     */
+    public aggregatesTemporal(obs: Record<string, any[]>,
+                              aggrMethod: string, aggrStart: number, aggrInterval: number):
         Record<string, Observation[]> {
         // console.log(aggrMethod);
         if (typeof aggrMethod !== "undefined") {
@@ -228,10 +255,10 @@ export default class DataFetcher {
                     } else {
                         if (aggrMethod === "average") {
                             // console.log("[LOG] merge averages temporal");
-                            mergedSummaries[key] = [this.mergeAveragesTemporal(values)];
+                            mergedSummaries[key] = [this.averagesTemporal(values)];
                         } else if (aggrMethod === "median") {
                             // console.log("[LOG] merge medians temporal");
-                            mergedSummaries[key] = [this.mergeMediansTemporal(values)];
+                            mergedSummaries[key] = [this.mediansTemporal(values)];
                         }
                     }
                 });
@@ -241,7 +268,11 @@ export default class DataFetcher {
         return obs;
     }
 
-    public mergeAveragesTemporal(obs: any[]) {
+    /**
+     * Apply averaging to observations in time
+     * @param obs
+     */
+    public averagesTemporal(obs: any[]) {
         const startOb = obs[0];
         let count: number = 0;
         let total: number = 0;
@@ -263,7 +294,11 @@ export default class DataFetcher {
         return startOb;
     }
 
-    public mergeMediansTemporal(obs: any[]) {
+    /**
+     * Apply medians to observations in time
+     * @param obs
+     */
+    public mediansTemporal(obs: any[]) {
         const startOb = obs[0];
         startOb.hasSimpleResult = this.getMedian(obs);
         return startOb;
@@ -325,29 +360,36 @@ export default class DataFetcher {
         }
         let allFragObs = this.mergeObservations(unsortedObs);
         // console.log(allFragObs);
-        allFragObs = this.mergeAggregatesSpatial(allFragObs, aggrMethod, tiles.length);
+        allFragObs = this.aggregatesSpatial(allFragObs, aggrMethod);
         // console.log(allFragObs);
         return {fragObs: allFragObs, fragmentStart, fragmentEnd, fragmentPrevious};
     }
 
-    public mergeAggregatesSpatial(obs: Record<string, Observation[]>,
-                                  aggrMethod: string,
-                                  nrTiles: number): Record<string, Observation[]> {
+    /**
+     * Apply aggregates to observations in spatial dimension
+     * @param obs: the observations to be aggregated
+     * @param aggrMethod: the method used to aggregate
+     */
+    public aggregatesSpatial(obs: Record<string, Observation[]>, aggrMethod: string): Record<string, Observation[]> {
         if (aggrMethod === "average") {
             const mergedAverages: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
-                ([key, values]) => mergedAverages[key] = this.mergeAveragesSpatial(values));
+                ([key, values]) => mergedAverages[key] = this.averagesSpatial(values));
             return mergedAverages;
         } else if (aggrMethod === "median") {
             const mergedMedians: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
-                ([key, values]) => mergedMedians[key] = this.mergeMediansSpatial(values));
+                ([key, values]) => mergedMedians[key] = this.mediansSpatial(values));
             return mergedMedians;
         }
         return obs;
     }
 
-    public mergeAveragesSpatial(obs: any[]): any[] {
+    /**
+     * Apply averaging to observations in spatial dimension
+     * @param obs
+     */
+    public averagesSpatial(obs: any[]): any[] {
         let currOb = obs[0];
         let total = 0;
         let count = 0;
@@ -389,7 +431,11 @@ export default class DataFetcher {
         return mergedObs;
     }
 
-    public mergeMediansSpatial(obs: any[]): any[] {
+    /**
+     * Apply medians to observations in spatial dimension
+     * @param obs
+     */
+    public mediansSpatial(obs: any[]): any[] {
         const mergedObs: any[] = [];
         let currOb = obs[0];
         let medianObs: any[] = [];
@@ -412,6 +458,10 @@ export default class DataFetcher {
         return mergedObs;
     }
 
+    /**
+     * Get medians of observations
+     * @param obs
+     */
     public getMedian(obs: any[]) {
         if (obs.length === 0) {
             return 0;
@@ -424,12 +474,6 @@ export default class DataFetcher {
         }
 
         return (obs[half - 1].hasSimpleResult + obs[half].hasSimpleResult) / 2.0;
-    }
-
-    public parseISOString(s: string) {
-        const b = s.split(/\D+/);
-        return new Date(Date.UTC(Number(b[0]), Number(b[1]) - 1,
-            Number(b[2]), Number(b[3]), Number(b[4]), Number(b[5]), Number(b[6])));
     }
 
     /**
@@ -628,6 +672,15 @@ export default class DataFetcher {
         return sensorArr;
     }
 
+    /**
+     * Build a new aggregate observation
+     * @param time
+     * @param value
+     * @param metricId
+     * @param sensors
+     * @param usedProcedure
+     * @param aggrInterval
+     */
     private buildAggregateObservation(
         time: number,
         value: (number | string),
@@ -656,6 +709,12 @@ export default class DataFetcher {
         };
     }
 
+    /**
+     * Calculate medians of a list of observations
+     * @param obs
+     * @param aggrInterval
+     * @param metric
+     */
     private calculateMedians(obs: any[], aggrInterval: number, metric: string) {
         const medianObservations = [];
         // startDate + 5 minutes
@@ -698,6 +757,12 @@ export default class DataFetcher {
         return medianObservations;
     }
 
+    /**
+     * Calculate averages of a list of observations
+     * @param obs
+     * @param aggrInterval
+     * @param metric
+     */
     private calculateAverages(obs: any[], aggrInterval: number, metric: string) {
         const avgObservations = [];
         console.log(obs);
