@@ -1,4 +1,4 @@
-import DataFetcher from "../../lib/Fetcher/DataFetcher";
+import DataFetcher from "../../src/Fetcher/DataFetcher";
 // tslint:disable-next-line:no-var-requires
 const urlParser = require("url");
 
