@@ -187,8 +187,6 @@ export default class PolygonUtils {
     private calculateTileGridWithinPolygon(): Array<Array<Tile | undefined>> {
         const rows = this.tBoundingBox.minTile.yTile - this.tBoundingBox.maxTile.yTile + 1;
         const cols = this.tBoundingBox.maxTile.xTile - this.tBoundingBox.minTile.xTile + 1;
-        console.log(rows);
-        console.log(cols);
         const tilePolys: Array<Array<Tile | undefined>> = [];
         for (let i = 0; i < rows; i++) {
             tilePolys[i] = [];
@@ -208,7 +206,6 @@ export default class PolygonUtils {
                 // console.log(intersect(this.polygon, bboxPoly));
                 // console.log(booleanDisjoint(this.polygon, bboxPoly));
                 if (! booleanDisjoint(this.polygon, bboxPoly)) {
-                    console.log("succes");
                     tilePolys[currY - offsetYtile][currX - offsetXtile] = new Tile(currX, currY, Config.context.zoom);
                 }
             }

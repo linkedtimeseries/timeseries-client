@@ -37,4 +37,5 @@ export class FragmentEvent<T> {
     public pipe = (te: FragmentEvent<T>): Disposable => {
         return this.on((e) => te.emit(e));
     }
+
 }

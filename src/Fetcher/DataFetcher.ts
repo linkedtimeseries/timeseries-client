@@ -1,6 +1,7 @@
 import Config from "../Config/Config";
 import Observation from "../DataTypes/Observation";
 import {FragmentEvent} from "../EventEmitter/FragmentEvent";
+import {Listener} from "../EventEmitter/Listener";
 import {Tile} from "../Polygon/Tile";
 import PolygonUtils from "../Polygon/Utils";
 // tslint:disable-next-line:no-var-requires
@@ -11,7 +12,7 @@ const UriTemplate = require("uritemplate");
 const http = require("follow-redirects").http;
 // tslint:disable-next-line:no-var-requires
 const CacheableRequest = require("cacheable-request");
-const cacheableRequest = new CacheableRequest(http.request);
+let cacheableRequest = new CacheableRequest(http.request);
 // tslint:disable-next-line:no-var-requires
 const urlParser = require("url");
 
@@ -24,6 +25,7 @@ export default class DataFetcher {
     private currentDate: Date = new Date();
     private startDate: Date = new Date();
     private endDate: Date = new Date();
+    private dataEvent: FragmentEvent<object> = new FragmentEvent();
 
     /**
      * Recursively requests all necessary fragments to fulfill the request
@@ -44,17 +46,16 @@ export default class DataFetcher {
         const polygonUtils: PolygonUtils = new PolygonUtils(geometry);
         // console.log(geometry);
         const tiles: Tile[] = polygonUtils.calculateTilesWithinPolygon();
-        console.log("request sent");
+        // console.log("request sent");
         // console.log(tiles);
         fromDate = this.dateOffsetCorrection(fromDate, aggrPeriod);
         toDate = this.dateOffsetCorrection(toDate, aggrPeriod);
-        console.log("[LOG] fromDate after offset correction: " + fromDate);
-        console.log("[LOG] toDate after offset correction: " + toDate);
         this.observations = {};
         this.startDate = new Date(fromDate);
         this.endDate = new Date(toDate);
         this.currentDate = new Date(fromDate);
-        this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
+        await this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
+        return;
     }
 
     /**
@@ -110,7 +111,7 @@ export default class DataFetcher {
         polygonUtils: PolygonUtils,
         aggrMethod?: string,
         aggrPeriod?: string) {
-        this.getTilesDataFragmentsTemporal(tiles, polygonUtils, aggrMethod, aggrPeriod)
+        await this.getTilesDataFragmentsTemporal(tiles, polygonUtils, aggrMethod, aggrPeriod)
             .then((response) => {
                 // console.log("[LOG] response after temporal: " + response);
                 // console.log("current date: " + this.currentDate);
@@ -121,9 +122,11 @@ export default class DataFetcher {
                     // console.log(urlParser.parse(response.previous).query);
                     // console.log(urlParser.parse(response.previous).query.page);
                     this.getObservationsRecursive(tiles, polygonUtils, aggrMethod, aggrPeriod);
+                    return;
                 }
-                console.log("[LOG] finished");
+                // console.log("[LOG] finished");
         });
+        return;
     }
 
     /**
@@ -207,7 +210,6 @@ export default class DataFetcher {
         this.addObservations(aggregateObs);
         const startDateString: string = new Date(aggrStart).toISOString();
         // console.log({startDateString, endDateString});
-
         this.fragEvent.emit({startDateString, endDateString});
         return {start: startDateString, next: nextDate};
     }
@@ -320,6 +322,8 @@ export default class DataFetcher {
             fragmentStart = response.startDate;
             fragmentEnd = response.endDate;
             fragmentNext = response.next;
+            // for testing purposes
+            this.dataEvent.emit({startDateString: response.startDate, endDateString: response.endDate, data: response});
             const template = response["dcterms:isPartOf"]["hydra:search"]["hydra:template"];
             this.urlTemplate = UriTemplate.parse(template);
             if (response["@graph"].length <= 1) {
@@ -538,9 +542,22 @@ export default class DataFetcher {
      * Add a listener to the fragEvent. This makes sure that the listener is notified each time
      * a new fragment is requested and ready.
      * @param method: the method that will be triggered each time a new fragment is ready
+     * @returns listener object that was added
      */
     public addFragmentListener(method: CallableFunction) {
-        this.fragEvent.on((observations) => method(observations));
+        const lst = (observations) => method(observations);
+        this.fragEvent.on(lst);
+        return lst;
+    }
+
+    public addDataListener(method: CallableFunction) {
+        const lst = (data) => method(data);
+        this.dataEvent.on(lst);
+        return lst;
+    }
+
+    public removeAllFragmentListeners() {
+        this.fragEvent = new FragmentEvent();
     }
 
     /**
@@ -620,6 +637,10 @@ export default class DataFetcher {
      */
     public getAllCurrentObservations() {
         return this.observations;
+    }
+
+    public clearCache() {
+        cacheableRequest = new CacheableRequest(http.request);
     }
 
     private calculateSummaries(metric: string, aggrMethod: string, aggrPeriod: string) {
