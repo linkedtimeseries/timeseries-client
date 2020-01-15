@@ -9,10 +9,10 @@ const moment = require("moment");
 // tslint:disable-next-line:no-var-requires
 const UriTemplate = require("uritemplate");
 // tslint:disable-next-line:no-var-requires
-const http = require("follow-redirects").http;
+const https = require("follow-redirects").https;
 // tslint:disable-next-line:no-var-requires
 const CacheableRequest = require("cacheable-request");
-let cacheableRequest = new CacheableRequest(http.request);
+let cacheableRequest = new CacheableRequest(https.request);
 // tslint:disable-next-line:no-var-requires
 const urlParser = require("url");
 
@@ -229,8 +229,8 @@ export default class DataFetcher {
             const mergedSummaries: Record<string, Observation[]> = {};
             Object.entries(obs).forEach(
                 ([key, values]) => {
-                    const phenomenonStart: string = values[0].phenomenonTime["time:hasBeginning"]["time:inXSDDateTimeStamp"];
-                    const phenomenonEnd: string = values[0].phenomenonTime["time:hasEnd"]["time:inXSDDateTimeStamp"];
+                    const phenomenonStart: string = values[0].phenomenonTime.hasBeginning.inXSDDateTimeStamp;
+                    const phenomenonEnd: string = values[0].phenomenonTime.hasEnd.inXSDDateTimeStamp;
                     if (new Date(phenomenonEnd).getTime() - new Date(phenomenonStart).getTime() === aggrInterval) {
                         mergedSummaries[key] = values;
                     } else {
@@ -478,7 +478,10 @@ export default class DataFetcher {
                 req.end();
             });
 
-            cacheReq.on("error", (err: any) => reject(err));
+            cacheReq.on("error", (err: any) => {
+                console.log(err);
+                reject(err);
+            });
         });
     }
 
@@ -640,7 +643,7 @@ export default class DataFetcher {
     }
 
     public clearCache() {
-        cacheableRequest = new CacheableRequest(http.request);
+        cacheableRequest = new CacheableRequest(https.request);
     }
 
     private calculateSummaries(metric: string, aggrMethod: string, aggrPeriod: string) {
@@ -686,12 +689,11 @@ export default class DataFetcher {
             "@type": "sosa:Observation",
             "hasSimpleResult": value,
             "resultTime": date.toISOString(),
-            "phenomenonTime": {"rdf:type": "time:Interval",
-                "time:hasBeginning": {"rdf:type": "time:Instant",
-                    "time:inXSDDateTimeStamp": new Date(time).toISOString() },
-                "time:hasEnd": {
-                    "rdf:type": "time:Instant",
-                    "time:inXSDDateTimeStamp": new Date(time + aggrInterval).toISOString() }},
+            "phenomenonTime": {
+                hasBeginning: {
+                    inXSDDateTimeStamp: new Date(time).toISOString() },
+                hasEnd: {
+                    inXSDDateTimeStamp: new Date(time + aggrInterval).toISOString() }},
             "observedProperty":  metricId,
             "madeBySensor": sensorArr,
             "usedProcedure": process.env.BASEURL + "/id/" + usedProcedure,
