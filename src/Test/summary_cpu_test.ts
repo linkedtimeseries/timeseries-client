@@ -14,7 +14,7 @@ const toDate = "2019-11-16T00:00:00.000Z";
 let datafetcher = new DataFetcher();
 const metric = "http://example.org/data/airquality.no2::number";
 let start;
-const methods: CallableFunction[] = [summariesWeekMedianMinData];
+const methods: CallableFunction[] = [summariesWeekAvgHourData];
 const influx = new Influx.InfluxDB({
     host: "localhost",
     database: "cadvisor_db",

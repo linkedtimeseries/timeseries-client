@@ -68,7 +68,7 @@ async function getCPUUsage(param: string) {
         .then((res) => {
             // const result = JSON.parse(res);
             // console.log(res);
-            fs.writeFile(`./src/Test/testData/cpuData/${methods[methodIndex]}_aqs1_cpu.txt`,
+            fs.writeFile(`./src/Test/testData/cpuData/${methods[methodIndex]}_aqs1_cpu2.txt`,
                 JSON.stringify(res), (err) => {
                     if (err) {
                         return console.log(err);
@@ -85,7 +85,7 @@ async function getCPUUsage(param: string) {
         .then((res) => {
             // const result = JSON.parse(res);
             console.log(res);
-            fs.writeFile(`./src/Test/testData/cpuData/${methods[methodIndex]}_aqs2_cpu.txt`,
+            fs.writeFile(`./src/Test/testData/cpuData/${methods[methodIndex]}_aqs2_cpu2.txt`,
                 JSON.stringify(res), (err) => {
                     if (err) {
                         return console.log(err);
