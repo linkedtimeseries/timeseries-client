@@ -22,10 +22,10 @@
   },
   "homepage": "https://github.com/sigvevermandere/airQualityClientside#readme",
   "devDependencies": {
-    "ts-loader": "^6.2.0",
+    "ts-loader": "^9.4.2",
     "typescript": "^3.6.3",
-    "webpack": "^4.41.0",
-    "webpack-cli": "^3.3.9"
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.1"
   },
   "dependencies": {
     "@turf/nearest-point-to-line": "^6.0.0",
